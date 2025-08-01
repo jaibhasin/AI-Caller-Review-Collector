@@ -1,2 +1,4 @@
 langchain_google_genai 
 langchain-community
+assemblyai
+pyaudio
