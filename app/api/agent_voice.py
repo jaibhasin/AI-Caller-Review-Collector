@@ -63,6 +63,42 @@ async def agent_voice(ws: WebSocket):
     )
 
     try : 
+        
+        initial_input = prompt.format(
+            product_name=PRODUCT_NAME,
+            product_description=PRODUCT_DESC,
+            input="Call started"
+        )
+        initial_reply = conversation.run(initial_input).strip()
+        await ws.send_json({"user_text": "Call started", "agent_reply": initial_reply})
+
+        # Stream initial greeting audio
+        url = f"wss://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}/stream-input?model_id={MODEL_ID}"
+        async with aiohttp.ClientSession() as session:
+            async with session.ws_connect(url, max_msg_size=0) as el_ws:
+                await el_ws.send_json({
+                    "text": " ",
+                    "xi_api_key": API_KEY,
+                    "voice_settings": {
+                        "stability": 0.3,
+                        "similarity_boost": 0.8,
+                        "use_speaker_boost": False
+                    },
+                    "generation_config": {"chunk_length_schedule": [50, 100]}
+                })
+                await el_ws.send_json({"text": initial_reply, "flush": True})
+                await el_ws.send_json({"text": ""})
+                async for msg in el_ws:
+                    if msg.type is aiohttp.WSMsgType.TEXT:
+                        data = json.loads(msg.data)
+                        audio_b64 = data.get("audio")
+                        if audio_b64:
+                            await ws.send_bytes(base64.b64decode(audio_b64))
+                        if data.get("isFinal"):
+                            break
+                    elif msg.type is aiohttp.WSMsgType.ERROR:
+                        break
+
         while True : 
 
             # 1️⃣ receive caller audio
