@@ -24,8 +24,11 @@ from langchain.memory import ConversationBufferMemory
 
 
 API_KEY  = os.getenv("ELEVEN_LABS_API_KEY")         # ← make sure this exists
-VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
+VOICE_ID = "pNInz6obpgDQGcFmaJgB"
+# MODEL_ID = "eleven_turbo_v2_5"
 MODEL_ID = "eleven_turbo_v2_5"
+
+
 
 router = APIRouter()
 
@@ -80,8 +83,8 @@ async def agent_voice(ws: WebSocket):
                     "text": " ",
                     "xi_api_key": API_KEY,
                     "voice_settings": {
-                        "stability": 0.3,
-                        "similarity_boost": 0.8,
+                        "stability": 0.4,
+                        "similarity_boost": 0.9,
                         "use_speaker_boost": False
                     },
                     "generation_config": {"chunk_length_schedule": [50, 100]}
