@@ -2,6 +2,7 @@ import os, json, base64, aiohttp
 from fastapi import APIRouter, WebSocket
 from dotenv import load_dotenv
 from app.services.stt2_service import transcribe_audio
+# from app.services.mock_stt_service import transcribe_audio  # Fallback if needed
 # from app.services.whisper_service import transcribe_audio
 # from app.services.llm_service import generate_response
 from langchain.prompts import PromptTemplate
@@ -10,9 +11,13 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 
 load_dotenv()
 
-llm = ChatGoogleGenerativeAI(model='gemini-2.0-flash')
-
 GOOGLE_API_KEY = os.getenv("SECRET_KEY_GOOGLE_AI")  # Ensure this exists
+
+# Initialize LLM with API key
+llm = ChatGoogleGenerativeAI(
+    model='gemini-2.0-flash-exp',
+    google_api_key=GOOGLE_API_KEY
+)
 
 from langchain.chains import ConversationChain
 from langchain.memory import ConversationBufferMemory
@@ -25,23 +30,21 @@ MODEL_ID = "eleven_turbo_v2_5"
 router = APIRouter()
 
 
-BASE_PROMPT = """You are an AI phone agent gathering concise customer feedback.
+BASE_PROMPT = """You are an AI phone agent gathering concise customer feedback about the Lifelong Professional Pickleball Set - a complete set with durable fiberglass paddles and ergonomic grips.
 
-Product context
-• Name: {product_name}
-• One-line description: {product_description}
-
-Guidelines for every reply (≤ 25 words)
+Guidelines for every reply (≤ 25 words):
 1. Greet or respond politely.
-2. Ask one clear question about the product’s quality, features, or user experience.
+2. Ask one clear question about the product's quality, features, or user experience.
 3. If the caller answers clearly, thank them and sign off.
 4. If the answer is vague, ask one follow-up for clarification.
 5. No explanations about yourself or the system.
-6. Mirror the caller’s language; default to English if unsure.
+6. Mirror the caller's language; default to English if unsure.
 7. Never exceed 25 words.
 
-Caller: {input}
-Agent:"""
+Current conversation:
+{history}
+Human: {input}
+Assistant:"""
 
 prompt = PromptTemplate.from_template(BASE_PROMPT)
 
@@ -51,10 +54,9 @@ async def agent_voice(ws: WebSocket):
     await ws.accept()
     memory = ConversationBufferMemory()
     conversation = ConversationChain(
-        llm = llm,
-        prompt = prompt,
-        input_variables = ["product_name", "product_description", "input"],
-        memory = memory
+        llm=llm,
+        prompt=prompt,
+        memory=memory
     )
 
     PRODUCT_NAME = "Lifelong Professional Pickleball Set"
@@ -66,11 +68,8 @@ async def agent_voice(ws: WebSocket):
     try : 
         
         
-        initial_reply = conversation.run(
-            product_name = PRODUCT_NAME,
-            product_description = PRODUCT_DESC,
-            input = ""
-        ).strip()
+        # Generate initial greeting
+        initial_reply = conversation.predict(input="Hello, I'm calling to get your feedback on our Lifelong Professional Pickleball Set. How has your experience been?").strip()
         await ws.send_json({"user_text": "Call started", "agent_reply": initial_reply})
 
         # Stream initial greeting audio
@@ -110,21 +109,26 @@ async def agent_voice(ws: WebSocket):
             audio_bytes = first["bytes"]
 
             # 2️⃣ STT ➜ LLM
-            user_text = transcribe_audio(audio_bytes)
-            if not user_text:
-                await ws.send_json({"error": "could_not_transcribe"})
-                await ws.close()
+            try:
+                print(f"[DEBUG] Received audio bytes: {len(audio_bytes)} bytes")
+                user_text = transcribe_audio(audio_bytes)
+                print("[DEBUG] Transcribed text:", user_text)
+
+                if "[ERROR]" in user_text or not user_text.strip():
+                    await ws.send_json({"error": "Transcription failed or empty"})
+                    return
+            except Exception as e:
+                print(f"[ERROR] STT failed: {e}")
+                await ws.send_json({"error": "Internal transcription error"})
                 return
+
 
             # agent_reply = generate_response(user_text)
             # full_prompt = f"{BASE_PROMPT}\nUser: {user_text}\nAgent:"
             # agent_reply = conversation.run(full_prompt)
 
-            agent_reply = conversation.run(
-                product_name = PRODUCT_NAME,
-                product_description = PRODUCT_DESC,
-                input = user_text
-            )
+            # Generate AI response using conversation chain
+            agent_reply = conversation.predict(input=user_text).strip()
 
             await ws.send_json({"user_text": user_text, "agent_reply": agent_reply})
 
@@ -164,5 +168,15 @@ async def agent_voice(ws: WebSocket):
                                 break
                         elif msg.type is aiohttp.WSMsgType.ERROR:
                             break
-    finally : 
-        await ws.close()
+    except Exception as e:
+        print(f"WebSocket error: {e}")
+        try:
+            await ws.send_json({"error": "Connection error occurred"})
+        except:
+            pass
+    finally:
+        try:
+            if not ws.client_state.name == 'DISCONNECTED':
+                await ws.close()
+        except:
+            pass

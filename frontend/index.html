@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Voice Review Collector</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <i class="fas fa-microphone-alt"></i>
+                <h1>AI Voice Review Collector</h1>
+            </div>
+            <div class="product-info">
+                <h2>Lifelong Professional Pickleball Set</h2>
+                <p>Complete set with durable fiberglass paddles and ergonomic grips</p>
+            </div>
+        </header>
+
+        <main class="main-content">
+            <div class="call-interface">
+                <div class="status-display">
+                    <div class="connection-status" id="connectionStatus">
+                        <i class="fas fa-circle"></i>
+                        <span>Disconnected</span>
+                    </div>
+                    <div class="call-duration" id="callDuration">
+                        <i class="fas fa-clock"></i>
+                        <span>00:00</span>
+                    </div>
+                </div>
+
+                <div class="audio-controls">
+                    <button class="call-btn" id="startCallBtn">
+                        <i class="fas fa-phone"></i>
+                        <span>Start Call</span>
+                    </button>
+                    <button class="record-btn" id="recordBtn" disabled>
+                        <i class="fas fa-microphone"></i>
+                        <span>Hold to Talk</span>
+                    </button>
+                    <button class="end-call-btn" id="endCallBtn" disabled>
+                        <i class="fas fa-phone-slash"></i>
+                        <span>End Call</span>
+                    </button>
+                </div>
+
+                <div class="audio-visualizer" id="audioVisualizer">
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                    <div class="wave-bar"></div>
+                </div>
+            </div>
+
+            <div class="conversation-panel">
+                <div class="conversation-header">
+                    <h3><i class="fas fa-comments"></i> Conversation</h3>
+                    <button class="clear-btn" id="clearConversation">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+                <div class="conversation-content" id="conversationContent">
+                    <div class="message-placeholder">
+                        <i class="fas fa-comment-dots"></i>
+                        <p>Start a call to begin collecting feedback</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer class="footer">
+            <div class="stats">
+                <div class="stat-item">
+                    <span class="stat-label">Total Calls</span>
+                    <span class="stat-value" id="totalCalls">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Reviews Collected</span>
+                    <span class="stat-value" id="reviewsCollected">0</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Avg Call Duration</span>
+                    <span class="stat-value" id="avgDuration">0:00</span>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <div class="toast" id="toast">
+        <i class="fas fa-info-circle"></i>
+        <span id="toastMessage"></span>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

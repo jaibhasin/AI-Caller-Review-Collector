@@ -1,4 +1,9 @@
 langchain_google_genai 
 langchain-community
-assemblyai
+assemblyai[extras]
 pyaudio
+fastapi
+uvicorn[standard]
+aiohttp
+python-dotenv
+requests

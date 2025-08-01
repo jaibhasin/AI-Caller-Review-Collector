@@ -1,11 +1,21 @@
 from fastapi import FastAPI
-from app.api import stt, chat
-# from app.api.tts_stream import router as tts_ws_router
 from app.api.agent_voice import router as agent_voice_router
 
-app = FastAPI()
+app = FastAPI(title="AI Voice Review Collector", description="AI-powered voice agent for collecting customer feedback")
 
-app.include_router(stt.router, prefix="/stt", tags=["STT"])
-app.include_router(chat.router , prefix="/agent", tags=["Chat"])
-# app.include_router(tts_ws_router, prefix="/api", tags=["TTS"])
-app.include_router(agent_voice_router, prefix="/api", tags=["Agent voice"])
+# Add CORS middleware for frontend integration
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify your frontend domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(agent_voice_router, prefix="/api", tags=["Agent Voice"])
+
+@app.get("/")
+async def root():
+    return {"message": "AI Voice Review Collector API is running!", "status": "active"}
