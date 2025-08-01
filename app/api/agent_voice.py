@@ -64,12 +64,12 @@ async def agent_voice(ws: WebSocket):
 
     try : 
         
-        initial_input = prompt.format(
-            product_name=PRODUCT_NAME,
-            product_description=PRODUCT_DESC,
-            input="Call started"
-        )
-        initial_reply = conversation.run(initial_input).strip()
+        
+        initial_reply = conversation.run(
+            product_name = PRODUCT_NAME,
+            product_description = PRODUCT_DESC,
+            input = ""
+        ).strip()
         await ws.send_json({"user_text": "Call started", "agent_reply": initial_reply})
 
         # Stream initial greeting audio
