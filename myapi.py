@@ -1,36 +1,26 @@
-import os, json, base64, asyncio, pathlib, websockets
+# example.py
+import os
 from dotenv import load_dotenv
+from elevenlabs.client import ElevenLabs
+from elevenlabs import play
+import base64
 
 load_dotenv()
-API_KEY  = os.getenv("ELEVEN_LABS_API_KEY")      # must be set
-VOICE_ID = "JBFqnCBsd6RMkjVDRZzb"
-MODEL_ID = "eleven_multilingual_v2"
-OUTFILE  = "stream_test.mp3"
 
-async def go():
-    uri = (f"wss://api.elevenlabs.io/v1/text-to-speech/"
-           f"{VOICE_ID}/stream-input?model_id={MODEL_ID}")
+elevenlabs = ElevenLabs(
+  api_key=os.getenv("ELEVEN_LABS_API_KEY"),
+)
 
-    async with websockets.connect(uri, max_size=None) as ws:
-        # initialise
-        await ws.send(json.dumps({
-            "text": " ",
-            "xi_api_key": API_KEY,
-            "voice_settings": {"stability": 0.3, "similarity_boost": 0.8}
-        }))
-        # actual text
-        await ws.send(json.dumps({"text": "Realtime test from ElevenLabs.", "flush": True}))
-        await ws.send(json.dumps({"text": ""}))
+voices = elevenlabs.text_to_voice.design(
+    model_id="eleven_multilingual_ttv_v2",
+    voice_description="A massive evil ogre speaking at a quick pace. He has a silly and resonant tone.",
+    text="Your weapons are but toothpicks to me. Surrender now and I may grant you a swift end. I've toppled kingdoms and devoured armies. What hope do you have against me?",
+)
 
-        pathlib.Path(OUTFILE).write_bytes(b"")      # truncate
-        async for msg in ws:
-            data = json.loads(msg)
-            audio_b64 = data.get("audio")
-            if audio_b64:                          # ← guard against null/None
-                with open(OUTFILE, "ab") as f:
-                    f.write(base64.b64decode(audio_b64))
-            if data.get("isFinal"):
-                break
+for preview in voices.previews:
+    # Convert base64 to audio buffer
+    audio_buffer = base64.b64decode(preview.audio_base_64)
 
-asyncio.run(go())
-print("✅ wrote", OUTFILE, "-", pathlib.Path(OUTFILE).stat().st_size, "bytes")
+    print(f"Playing preview: {preview.generated_voice_id}")
+
+    play(audio_buffer)

@@ -4,7 +4,7 @@ from elevenlabs import ElevenLabs                     # non-streaming SDK
 
 load_dotenv()
 
-API_KEY   = os.getenv("Eleven_LABS_API_KEY")
+API_KEY   = os.getenv("ELEVEN_LABS_API_KEY")
 VOICE_ID  = "JBFqnCBsd6RMkjVDRZzb"
 MODEL_ID  = "eleven_multilingual_v2"
 
@@ -24,4 +24,7 @@ def text_to_audio(text: str) -> str:
             f.write(chunk)
     return path
 
-text_to_audio("Hello, this is a test of the ElevenLabs TTS service.")  # Example usage
+# text_to_audio("Hello, this is a test of the ElevenLabs TTS service.")  # Example usage
+# text_to_audio('[whispers] "I never knew it could be this way"')
+text_to_audio('She whispered softly, "I never knew it could be this way"')
+
