@@ -19,6 +19,7 @@ llm = ChatGoogleGenerativeAI(
     google_api_key=GOOGLE_API_KEY
 )
 
+
 from langchain.chains import ConversationChain
 from langchain.memory import ConversationBufferMemory
 
