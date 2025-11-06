@@ -109,8 +109,8 @@ async def agent_voice(ws: WebSocket):
                             await ws.send_bytes(chunk)
 
                             # also save locally to debug
-                            with open(debug_path, "ab") as f:
-                                f.write(chunk)
+                            # with open(debug_path, "ab") as f:
+                            #     f.write(chunk)
                         else:
                             print("[DEBUG] No audio in this packet")
                             print(data)
@@ -195,8 +195,8 @@ async def agent_voice(ws: WebSocket):
                                 await ws.send_bytes(chunk)
 
                                 # also save locally to debug
-                                with open(debug_path, "ab") as f:
-                                    f.write(chunk)
+                                # with open(debug_path, "ab") as f:
+                                #     f.write(chunk)
                             else : 
                                 print("[DEBUG] No audio in this packet")
                                 print(data)
