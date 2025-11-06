@@ -111,7 +111,9 @@ async def agent_voice(ws: WebSocket):
                             # also save locally to debug
                             with open(debug_path, "ab") as f:
                                 f.write(chunk)
-
+                        else:
+                            print("[DEBUG] No audio in this packet")
+                            print(data)
                         if data.get("isFinal"):
                             break
                     elif msg.type is aiohttp.WSMsgType.ERROR:
@@ -195,7 +197,9 @@ async def agent_voice(ws: WebSocket):
                                 # also save locally to debug
                                 with open(debug_path, "ab") as f:
                                     f.write(chunk)
-
+                            else : 
+                                print("[DEBUG] No audio in this packet")
+                                print(data)
                             if data.get("isFinal"):
                                 break
                         elif msg.type is aiohttp.WSMsgType.ERROR:
