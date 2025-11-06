@@ -190,10 +190,17 @@ class VoiceReviewCollector {
                 }
             };
             
-            this.mediaRecorder.onstop = () => {
+            this.mediaRecorder.onstop = async () => {
                 const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
                 this.sendAudioToServer(audioBlob);
+
+                setTimeout(() => {
+                    // Send PCM silence, not webm
+                    const silence = new Uint8Array(1600); // 1600 bytes silence
+                    this.ws.send(silence);
+                }, 60);
             };
+
             
             this.mediaRecorder.start();
             

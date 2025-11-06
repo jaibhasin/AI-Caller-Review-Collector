@@ -1,7 +1,9 @@
 import os, json, base64, aiohttp
 from fastapi import APIRouter, WebSocket
 from dotenv import load_dotenv
-from app.services.stt2_service import transcribe_audio # stt 
+# from app.services.stt2_service import transcribe_audio # stt 
+from app.services.stt_streaming_service import AAIStreamingSTT # new thing , for STT
+
 # from app.services.mock_stt_service import transcribe_audio  # Fallback if needed
 # from app.services.whisper_service import transcribe_audio
 # from app.services.llm_service import generate_response
@@ -12,6 +14,9 @@ import time
 
 
 load_dotenv()
+
+
+
 
 GOOGLE_API_KEY = os.getenv("SECRET_KEY_GOOGLE_AI")  # Ensure this exists
 
@@ -59,11 +64,15 @@ prompt = PromptTemplate.from_template(BASE_PROMPT)
 async def agent_voice(ws: WebSocket):
     await ws.accept()
     memory = ConversationBufferMemory()
+    
     conversation = ConversationChain(
         llm=llm,
         prompt=prompt,
         memory=memory
     )
+
+    stream_stt = AAIStreamingSTT(sample_rate=16000, format_turns=False)
+    stream_stt.start()
 
     PRODUCT_NAME = "Lifelong Professional Pickleball Set"
     PRODUCT_DESC = (
@@ -122,27 +131,43 @@ async def agent_voice(ws: WebSocket):
         while True : 
 
             # 1️⃣ receive caller audio
+            print('[DEBUG] Waiting for caller audio...')
             first = await ws.receive()
             if first["type"] != "websocket.receive" or "bytes" not in first:
                 await ws.close(code=4000)
                 return
             audio_bytes = first["bytes"]
 
-            # 2️⃣ STT ➜ LLM
-            try:
-                print(f"[DEBUG] Received audio bytes: {len(audio_bytes)} bytes")
-                st = time.time()
-                user_text = transcribe_audio(audio_bytes)
-                print("[DEBUG] Transcribed text:", user_text)
-                print("[DEBUG] STT time:", round(time.time() - st, 3), "sec")
+            print(f"[DEBUG] Received audio bytes: {len(audio_bytes)} bytes")
 
-                if "[ERROR]" in user_text or not user_text.strip():
-                    await ws.send_json({"error": "Transcription failed or empty"})
-                    return
-            except Exception as e:
-                print(f"[ERROR] STT failed: {e}")
-                await ws.send_json({"error": "Internal transcription error"})
-                return
+            # 2️⃣ STT ➜ LLM
+            # try:
+            #     print(f"[DEBUG] Received audio bytes: {len(audio_bytes)} bytes")
+            #     st = time.time()
+            #     user_text = transcribe_audio(audio_bytes)
+            #     print("[DEBUG] Transcribed text:", user_text)
+            #     print("[DEBUG] STT time:", round(time.time() - st, 3), "sec")
+
+            #     if "[ERROR]" in user_text or not user_text.strip():
+            #         await ws.send_json({"error": "Transcription failed or empty"})
+            #         return
+            # except Exception as e:
+            #     print(f"[ERROR] STT failed: {e}")
+            #     await ws.send_json({"error": "Internal transcription error"})
+            #     return
+
+            # new try using streaming STT
+            st = time.time()
+            stream_stt.feed_webm(audio_bytes)
+
+            # Wait for a final turn (end_of_turn) up to 5s (usually ~0.3–0.6s)
+            user_text = stream_stt.get_final_turn(timeout=5.0)
+            if not user_text:
+                await ws.send_json({"error": "No finalized transcript yet"})
+                continue  # skip this iteration and read more audio
+
+            print("[DEBUG] Transcribed text:", user_text)
+            print("[DEBUG] STT(stream) time:", round(time.time() - st, 3), "sec")
 
 
             # agent_reply = generate_response(user_text)
@@ -208,13 +233,18 @@ async def agent_voice(ws: WebSocket):
 
     except Exception as e:
         print(f"WebSocket error: {e}")
+
         try:
             await ws.send_json({"error": "Connection error occurred"})
         except:
             pass
     finally:
         try:
-            if not ws.client_state.name == 'DISCONNECTED':
+            stream_stt.stop()
+        except Exception:
+            pass
+        try:
+            if ws.application_state.name != "DISCONNECTED" and ws.client_state.name != "DISCONNECTED":
                 await ws.close()
         except:
             pass
