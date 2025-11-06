@@ -9,6 +9,15 @@ class VoiceReviewCollector {
         this.callDurationInterval = null;
         this.audioChunks = [];
         
+        // Global AudioContext - will be created on user interaction for macOS compatibility
+        this.audioContext = null;
+        this.audioQueue = Promise.resolve();
+        
+        // Audio buffering for streaming chunks
+        this.currentAudioChunks = [];
+        this.isReceivingAudio = false;
+        this.audioTimeoutId = null;
+        
         // Statistics
         this.stats = {
             totalCalls: 0,
@@ -69,6 +78,18 @@ class VoiceReviewCollector {
         try {
             this.showToast('Connecting to AI agent...', 'info');
             
+            // CRITICAL for macOS: Create/Resume AudioContext synchronously during user gesture
+            if (!this.audioContext) {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                console.log('AudioContext created, state:', this.audioContext.state);
+            }
+            
+            // Resume must be called synchronously within user gesture handler on macOS
+            if (this.audioContext.state === 'suspended') {
+                await this.audioContext.resume();
+                console.log('AudioContext resumed, state:', this.audioContext.state);
+            }
+            
             // Request microphone permission
             this.audioStream = await navigator.mediaDevices.getUserMedia({ 
                 audio: {
@@ -101,8 +122,8 @@ class VoiceReviewCollector {
                     const data = JSON.parse(event.data);
                     this.handleConversationMessage(data);
                 } else {
-                    // Binary audio data
-                    this.playAudioResponse(event.data);
+                    // Binary audio data - buffer streaming chunks
+                    this.handleAudioChunk(event.data);
                 }
             };
             
@@ -250,21 +271,124 @@ class VoiceReviewCollector {
         this.conversationContent.scrollTop = this.conversationContent.scrollHeight;
     }
     
-    async playAudioResponse(audioData) {
-        try {
-            const audioBlob = new Blob([audioData], { type: 'audio/mpeg' });
-            const audioUrl = URL.createObjectURL(audioBlob);
-            const audio = new Audio(audioUrl);
-            
-            audio.onended = () => {
-                URL.revokeObjectURL(audioUrl);
-            };
-            
-            await audio.play();
-            
-        } catch (error) {
-            console.error('Error playing audio:', error);
+    handleAudioChunk(audioData) {
+        // Start buffering audio chunks
+        if (!this.isReceivingAudio) {
+            this.isReceivingAudio = true;
+            this.currentAudioChunks = [];
+            console.log('Started receiving audio stream');
         }
+        
+        // Add chunk to buffer
+        this.currentAudioChunks.push(audioData);
+        console.log(`Buffering chunk ${this.currentAudioChunks.length}, size:`, audioData.byteLength || audioData.size);
+        
+        // Reset timeout - if no new chunks arrive within 100ms, play the buffered audio
+        clearTimeout(this.audioTimeoutId);
+        this.audioTimeoutId = setTimeout(() => {
+            this.playBufferedAudio();
+        }, 100);
+    }
+    
+    async playBufferedAudio() {
+        if (this.currentAudioChunks.length === 0) {
+            this.isReceivingAudio = false;
+            return;
+        }
+        
+        console.log(`Playing ${this.currentAudioChunks.length} buffered chunks`);
+        const chunksToPlay = [...this.currentAudioChunks];
+        this.currentAudioChunks = [];
+        this.isReceivingAudio = false;
+        
+        // Combine all chunks into single blob
+        const completeAudioBlob = new Blob(chunksToPlay, { type: 'audio/mpeg' });
+        console.log('Combined audio blob size:', completeAudioBlob.size, 'bytes');
+        
+        // Play using queue
+        await this.playAudioResponse(completeAudioBlob);
+    }
+    
+    async playAudioResponse(audioData) {
+        // Use sequential queue-based playback to prevent overlap and ensure reliability
+        this.audioQueue = this.audioQueue.then(async () => {
+            try {
+                if (!this.audioContext) {
+                    console.error('AudioContext not initialized - user must click Start Call first');
+                    return;
+                }
+                
+                console.log('Playing audio, AudioContext state:', this.audioContext.state);
+                
+                // Convert to ArrayBuffer
+                let arrayBuffer;
+                if (audioData instanceof Blob) {
+                    arrayBuffer = await audioData.arrayBuffer();
+                } else if (audioData instanceof ArrayBuffer) {
+                    arrayBuffer = audioData;
+                } else {
+                    arrayBuffer = await new Blob([audioData], { type: 'audio/mpeg' }).arrayBuffer();
+                }
+                
+                if (arrayBuffer.byteLength === 0) {
+                    console.warn('Empty audio buffer, skipping');
+                    return;
+                }
+                
+                console.log('Decoding', arrayBuffer.byteLength, 'bytes...');
+                
+                // Decode audio data using global AudioContext
+                const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+                console.log('Decoded:', audioBuffer.duration.toFixed(2), 'seconds');
+                
+                // Create and configure buffer source
+                const source = this.audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(this.audioContext.destination);
+                
+                // Play audio and wait for it to complete
+                return new Promise((resolve) => {
+                    source.onended = () => {
+                        console.log('Playback completed');
+                        resolve();
+                    };
+                    source.start();
+                    console.log('Audio playing...');
+                });
+                
+            } catch (error) {
+                console.error('Error playing audio:', error.name, error.message);
+                // Fallback to HTML5 Audio for better MP3 compatibility
+                try {
+                    console.log('Trying HTML5 Audio fallback...');
+                    const audioBlob = audioData instanceof Blob ? audioData : new Blob([audioData], { type: 'audio/mpeg' });
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    const audio = new Audio(audioUrl);
+                    
+                    return new Promise((resolve) => {
+                        audio.onended = () => {
+                            URL.revokeObjectURL(audioUrl);
+                            console.log('HTML5 Audio playback completed');
+                            resolve();
+                        };
+                        audio.onerror = (e) => {
+                            console.error('HTML5 Audio error:', e);
+                            URL.revokeObjectURL(audioUrl);
+                            resolve();
+                        };
+                        audio.play().catch(e => {
+                            console.error('HTML5 play failed:', e);
+                            URL.revokeObjectURL(audioUrl);
+                            resolve();
+                        });
+                    });
+                } catch (fallbackError) {
+                    console.error('Fallback also failed:', fallbackError);
+                }
+            }
+        }).catch(error => {
+            console.error('Audio queue error:', error);
+        });
     }
     
     updateConnectionStatus(connected) {

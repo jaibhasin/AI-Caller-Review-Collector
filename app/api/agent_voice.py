@@ -8,6 +8,8 @@ from app.services.stt2_service import transcribe_audio # stt
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
+import time
+
 
 load_dotenv()
 
@@ -78,6 +80,8 @@ async def agent_voice(ws: WebSocket):
 
         # Stream initial greeting audio
         url = f"wss://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}/stream-input?model_id={MODEL_ID}"
+        
+        debug_path = f"/tmp/eleven_{int(time.time()*1000)}.raw"
         async with aiohttp.ClientSession() as session:
             async with session.ws_connect(url, max_msg_size=0) as el_ws:
                 await el_ws.send_json({
@@ -96,8 +100,18 @@ async def agent_voice(ws: WebSocket):
                     if msg.type is aiohttp.WSMsgType.TEXT:
                         data = json.loads(msg.data)
                         audio_b64 = data.get("audio")
-                        if audio_b64:
-                            await ws.send_bytes(base64.b64decode(audio_b64))
+                        # if audio_b64:
+                        #     await ws.send_bytes(base64.b64decode(audio_b64))
+                        if audio_b64:                        # skip control packets
+                            chunk = base64.b64decode(audio_b64)
+
+                            # send to frontend (existing behavior)
+                            await ws.send_bytes(chunk)
+
+                            # also save locally to debug
+                            with open(debug_path, "ab") as f:
+                                f.write(chunk)
+
                         if data.get("isFinal"):
                             break
                     elif msg.type is aiohttp.WSMsgType.ERROR:
@@ -115,8 +129,10 @@ async def agent_voice(ws: WebSocket):
             # 2️⃣ STT ➜ LLM
             try:
                 print(f"[DEBUG] Received audio bytes: {len(audio_bytes)} bytes")
+                st = time.time()
                 user_text = transcribe_audio(audio_bytes)
                 print("[DEBUG] Transcribed text:", user_text)
+                print("[DEBUG] STT time:", round(time.time() - st, 3), "sec")
 
                 if "[ERROR]" in user_text or not user_text.strip():
                     await ws.send_json({"error": "Transcription failed or empty"})
@@ -132,8 +148,10 @@ async def agent_voice(ws: WebSocket):
             # agent_reply = conversation.run(full_prompt)
 
             # Generate AI response using conversation chain
+            llm_time1 = time.time()
             agent_reply = conversation.predict(input=user_text).strip()
-
+            print("[DEBUG] LLM response time:", round(time.time() - llm_time1, 3), "sec")
+            print("[DEBUG] Agent reply:", agent_reply)
             await ws.send_json({"user_text": user_text, "agent_reply": agent_reply})
 
             # 3️⃣ ElevenLabs streaming (aiohttp WebSocket)
@@ -141,6 +159,8 @@ async def agent_voice(ws: WebSocket):
                 f"wss://api.elevenlabs.io/v1/text-to-speech/"
                 f"{VOICE_ID}/stream-input?model_id={MODEL_ID}"
             )
+            tts_t = time.time()
+            debug_path = f"debug_audio/eleven_{int(time.time()*1000)}.raw"
 
             async with aiohttp.ClientSession() as session:
                 async with session.ws_connect(url, max_msg_size=0) as el_ws:
@@ -167,11 +187,21 @@ async def agent_voice(ws: WebSocket):
                             data = json.loads(msg.data)
                             audio_b64 = data.get("audio")
                             if audio_b64:                        # skip control packets
-                                await ws.send_bytes(base64.b64decode(audio_b64))
+                                chunk = base64.b64decode(audio_b64)
+
+                                # send to frontend (existing behavior)
+                                await ws.send_bytes(chunk)
+
+                                # also save locally to debug
+                                with open(debug_path, "ab") as f:
+                                    f.write(chunk)
+
                             if data.get("isFinal"):
                                 break
                         elif msg.type is aiohttp.WSMsgType.ERROR:
                             break
+            print("[DEBUG] TTS stream gen time:", round(time.time() - tts_t, 3), "sec")
+
     except Exception as e:
         print(f"WebSocket error: {e}")
         try:
