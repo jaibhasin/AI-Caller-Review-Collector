@@ -1,7 +1,7 @@
 import os, json, base64, aiohttp
 from fastapi import APIRouter, WebSocket
 from dotenv import load_dotenv
-from app.services.stt2_service import transcribe_audio
+from app.services.stt2_service import transcribe_audio # stt 
 # from app.services.mock_stt_service import transcribe_audio  # Fallback if needed
 # from app.services.whisper_service import transcribe_audio
 # from app.services.llm_service import generate_response
