@@ -25,6 +25,23 @@ class VoiceReviewCollector {
             totalCallDuration: 0
         };
         
+        // Performance metrics
+        this.metrics = {
+            sttTime: 0,
+            sttUploadTime: 0,
+            sttProcessingTime: 0,
+            llmTime: 0,
+            ttsTime: 0,
+            totalResponseTime: 0,
+            audioLength: 0,
+            audioFormat: '',
+            responseLength: 0,
+            turnCount: 0,
+            audioChunks: 0,
+            wsLatency: 0,
+            efficiencyRatio: 0
+        };
+        
         this.initializeElements();
         this.attachEventListeners();
         this.loadStats();
@@ -39,11 +56,33 @@ class VoiceReviewCollector {
         
         // Status elements
         this.connectionStatus = document.getElementById('connectionStatus');
+        this.navStatus = document.getElementById('navStatus');
         this.callDuration = document.getElementById('callDuration');
+        this.turnCountDisplay = document.getElementById('turnCountDisplay');
         this.conversationContent = document.getElementById('conversationContent');
         this.audioVisualizer = document.getElementById('audioVisualizer');
         this.recordingStatus = document.getElementById('recordingStatus');
         this.instructions = document.getElementById('instructions');
+        
+        // Debug panel elements
+        this.debugContent = document.getElementById('debugContent');
+        this.sttTimeEl = document.getElementById('sttTime');
+        this.sttUploadTimeEl = document.getElementById('sttUploadTime');
+        this.sttProcessingTimeEl = document.getElementById('sttProcessingTime');
+        this.llmTimeEl = document.getElementById('llmTime');
+        this.ttsTimeEl = document.getElementById('ttsTime');
+        this.totalResponseEl = document.getElementById('totalResponse');
+        this.audioLengthEl = document.getElementById('audioLength');
+        this.audioFormatEl = document.getElementById('audioFormat');
+        this.responseLengthEl = document.getElementById('responseLength');
+        this.turnCountEl = document.getElementById('turnCount');
+        this.audioChunksEl = document.getElementById('audioChunks');
+        this.wsLatencyEl = document.getElementById('wsLatency');
+        this.connectionHealthEl = document.getElementById('connectionHealth');
+        this.efficiencyRatioEl = document.getElementById('efficiencyRatio');
+        
+        // Initialize debug panel
+        this.updateMetrics();
         
         // Stats elements
         this.totalCallsEl = document.getElementById('totalCalls');
@@ -102,11 +141,19 @@ class VoiceReviewCollector {
                 this.startCallBtn.disabled = true;
                 this.recordBtn.disabled = false;
                 this.endCallBtn.disabled = false;
+                this.instructions.style.display = 'none'; // Hide instructions during call
+                this.connectionHealthEl.textContent = 'Connected';
+                this.connectionHealthEl.className = 'metric-value good';
+                this.connectionStatus.textContent = 'Connected';
+                this.navStatus.classList.add('connected');
+                this.navStatus.querySelector('span').textContent = 'Connected';
                 this.callStartTime = Date.now();
                 this.startCallDurationTimer();
-                this.showToast('Connected! AI agent is ready to collect feedback.', 'success');
+                this.showToast('Connected! Click to talk or press Spacebar to start recording.', 'success');
                 this.stats.totalCalls++;
+                this.metrics.turnCount = 0; // Reset turn count for new call
                 this.updateStats();
+                this.updateMetrics();
             };
             
             this.ws.onmessage = (event) => {
@@ -150,6 +197,13 @@ class VoiceReviewCollector {
         this.startCallBtn.disabled = false;
         this.recordBtn.disabled = true;
         this.endCallBtn.disabled = true;
+        this.instructions.style.display = 'block'; // Show instructions when disconnected
+        this.recordingStatus.style.display = 'none'; // Hide recording status
+        this.connectionHealthEl.textContent = 'Disconnected';
+        this.connectionHealthEl.className = 'metric-value error';
+        this.connectionStatus.textContent = 'Disconnected';
+        this.navStatus.classList.remove('connected');
+        this.navStatus.querySelector('span').textContent = 'Ready';
         this.stopCallDurationTimer();
         this.stopAudioVisualizer();
         
@@ -202,6 +256,9 @@ class VoiceReviewCollector {
             }
             
             console.log('Using audio format:', mimeType);
+            this.metrics.audioFormat = mimeType;
+            this.audioFormatEl.textContent = mimeType;
+            
             this.mediaRecorder = new MediaRecorder(this.audioStream, {
                 mimeType: mimeType
             });
@@ -215,6 +272,16 @@ class VoiceReviewCollector {
             this.mediaRecorder.onstop = async () => {
                 // When recording stops, send the audio to server
                 const audioBlob = new Blob(this.audioChunks, { type: mimeType });
+                
+                // Calculate audio length
+                const audioUrl = URL.createObjectURL(audioBlob);
+                const audio = new Audio(audioUrl);
+                audio.addEventListener('loadedmetadata', () => {
+                    this.metrics.audioLength = Math.round(audio.duration * 100) / 100;
+                    this.updateMetrics();
+                    URL.revokeObjectURL(audioUrl);
+                });
+                
                 this.sendAudioToServer(audioBlob);
             };
 
@@ -264,7 +331,29 @@ class VoiceReviewCollector {
         if (data.agent_reply) {
             this.addMessageToConversation('agent', data.agent_reply);
             this.stats.reviewsCollected++;
+            this.metrics.turnCount++;
+            this.metrics.responseLength = data.agent_reply.length;
+            this.turnCountDisplay.textContent = this.metrics.turnCount;
             this.updateStats();
+            this.updateMetrics();
+        }
+        
+        // Handle performance metrics from backend
+        if (data.metrics) {
+            this.metrics.sttTime = data.metrics.stt_total_time || 0;
+            this.metrics.sttUploadTime = data.metrics.stt_upload_time || 0;
+            this.metrics.sttProcessingTime = data.metrics.stt_processing_time || 0;
+            this.metrics.llmTime = data.metrics.llm_time || 0;
+            this.metrics.ttsTime = data.metrics.tts_time || 0;
+            this.metrics.totalResponseTime = this.metrics.sttTime + this.metrics.llmTime + this.metrics.ttsTime;
+            this.metrics.efficiencyRatio = data.metrics.efficiency_ratio || 0;
+            
+            // Update audio length from backend if available
+            if (data.metrics.audio_duration) {
+                this.metrics.audioLength = data.metrics.audio_duration;
+            }
+            
+            this.updateMetrics();
         }
         
         if (data.error) {
@@ -273,10 +362,10 @@ class VoiceReviewCollector {
     }
     
     addMessageToConversation(type, text) {
-        // Remove placeholder if it exists
-        const placeholder = this.conversationContent.querySelector('.message-placeholder');
-        if (placeholder) {
-            placeholder.remove();
+        // Remove empty state if it exists
+        const emptyState = this.conversationContent.querySelector('.empty-state');
+        if (emptyState) {
+            emptyState.remove();
         }
         
         const messageDiv = document.createElement('div');
@@ -306,6 +395,8 @@ class VoiceReviewCollector {
         
         // Add this chunk to our collection
         this.currentAudioChunks.push(audioData);
+        this.metrics.audioChunks = this.currentAudioChunks.length;
+        this.updateMetrics();
         console.log(`Got audio chunk ${this.currentAudioChunks.length}`);
         
         // Wait a bit for more chunks, then play everything
@@ -432,9 +523,10 @@ class VoiceReviewCollector {
     
     clearConversation() {
         this.conversationContent.innerHTML = `
-            <div class="message-placeholder">
-                <i class="fas fa-comment-dots"></i>
-                <p>Start a call to begin collecting feedback</p>
+            <div class="empty-state">
+                <i class="fas fa-microphone-slash"></i>
+                <h3>No Active Conversation</h3>
+                <p>Start a call to begin collecting customer feedback</p>
             </div>
         `;
     }
@@ -466,6 +558,53 @@ class VoiceReviewCollector {
         }
     }
     
+
+    
+    updateMetrics() {
+        this.sttTimeEl.textContent = this.metrics.sttTime ? `${this.metrics.sttTime}ms` : '--';
+        this.sttUploadTimeEl.textContent = this.metrics.sttUploadTime ? `${this.metrics.sttUploadTime}ms` : '--';
+        this.sttProcessingTimeEl.textContent = this.metrics.sttProcessingTime ? `${this.metrics.sttProcessingTime}ms` : '--';
+        this.llmTimeEl.textContent = this.metrics.llmTime ? `${this.metrics.llmTime}ms` : '--';
+        this.ttsTimeEl.textContent = this.metrics.ttsTime ? `${this.metrics.ttsTime}ms` : '--';
+        this.totalResponseEl.textContent = this.metrics.totalResponseTime ? `${this.metrics.totalResponseTime}ms` : '--';
+        this.audioLengthEl.textContent = this.metrics.audioLength ? `${this.metrics.audioLength}s` : '--';
+        this.audioFormatEl.textContent = this.metrics.audioFormat || '--';
+        this.responseLengthEl.textContent = this.metrics.responseLength ? `${this.metrics.responseLength} chars` : '--';
+        this.turnCountEl.textContent = this.metrics.turnCount;
+        this.audioChunksEl.textContent = this.metrics.audioChunks || '--';
+        this.wsLatencyEl.textContent = this.metrics.wsLatency ? `${this.metrics.wsLatency}ms` : '--';
+        this.efficiencyRatioEl.textContent = this.metrics.efficiencyRatio ? `${this.metrics.efficiencyRatio.toFixed(2)}x` : '--';
+        
+        // Add color coding for performance
+        this.addPerformanceColors();
+    }
+    
+    addPerformanceColors() {
+        // STT Time coloring
+        if (this.metrics.sttTime) {
+            this.sttTimeEl.className = this.metrics.sttTime < 2000 ? 'metric-value good' : 
+                                      this.metrics.sttTime < 5000 ? 'metric-value warning' : 'metric-value error';
+        }
+        
+        // LLM Time coloring
+        if (this.metrics.llmTime) {
+            this.llmTimeEl.className = this.metrics.llmTime < 1000 ? 'metric-value good' : 
+                                      this.metrics.llmTime < 2000 ? 'metric-value warning' : 'metric-value error';
+        }
+        
+        // Total Response coloring
+        if (this.metrics.totalResponseTime) {
+            this.totalResponseEl.className = this.metrics.totalResponseTime < 4000 ? 'metric-value good' : 
+                                            this.metrics.totalResponseTime < 8000 ? 'metric-value warning' : 'metric-value error';
+        }
+        
+        // Efficiency Ratio coloring (higher is better)
+        if (this.metrics.efficiencyRatio) {
+            this.efficiencyRatioEl.className = this.metrics.efficiencyRatio > 0.5 ? 'metric-value good' : 
+                                              this.metrics.efficiencyRatio > 0.2 ? 'metric-value warning' : 'metric-value error';
+        }
+    }
+
     handleKeyPress(event) {
         // Spacebar to toggle recording (when connected)
         if (event.code === 'Space' && this.isConnected) {
@@ -478,6 +617,8 @@ class VoiceReviewCollector {
             event.preventDefault();
             this.endCall();
         }
+        
+
     }
     
     showToast(message, type = 'info') {

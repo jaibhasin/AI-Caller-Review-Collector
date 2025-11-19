@@ -192,13 +192,27 @@ async def agent_voice(ws: WebSocket):
             print(f"[DEBUG] Received audio: {len(audio_bytes)} bytes")
 
             # Step 2: Convert speech to text
-
-            # Use simple STT - much easier and faster
-            st = time.time()
-            user_text = transcribe_audio_simple(audio_bytes)
+            stt_result = transcribe_audio_simple(audio_bytes)
+            
+            # Handle new detailed STT response
+            if isinstance(stt_result, dict):
+                user_text = stt_result["text"]
+                stt_upload_time = round(stt_result.get("upload_time", 0))
+                stt_processing_time = round(stt_result.get("processing_time", 0))
+                stt_total_time = round(stt_result.get("total_time", 0))
+                audio_duration = stt_result.get("audio_duration", 0)
+                efficiency_ratio = stt_result.get("efficiency_ratio", 0)
+            else:
+                # Fallback for old format
+                user_text = stt_result
+                stt_upload_time = 0
+                stt_processing_time = 0
+                stt_total_time = 0
+                audio_duration = 0
+                efficiency_ratio = 0
             
             print("[DEBUG] Transcribed text:", user_text)
-            print("[DEBUG] STT time:", round(time.time() - st, 3), "sec")
+            print("[DEBUG] STT breakdown - Upload:", stt_upload_time, "ms, Processing:", stt_processing_time, "ms, Total:", stt_total_time, "ms")
             
             # Check if transcription failed
             if "[ERROR]" in user_text or not user_text.strip():
@@ -268,17 +282,34 @@ Return ONLY the final conversational response, nothing else:"""
             if any(word in user_lower for word in ["game", "play", "performance"]) and "performance" not in conversation_state["topics_covered"]:
                 conversation_state["topics_covered"].append("performance")
             
-            print("[DEBUG] Optimized LLM time:", round(time.time() - llm_time1, 3), "sec")
+            llm_time = round((time.time() - llm_time1) * 1000)  # Convert to milliseconds
+            
+            print("[DEBUG] Optimized LLM time:", llm_time, "ms")
             print("[DEBUG] Conversation state:", conversation_state)
             print("[DEBUG] Final agent reply:", agent_reply)
-            await ws.send_json({"user_text": user_text, "agent_reply": agent_reply})
+            
+            # Send conversation data with detailed performance metrics
+            await ws.send_json({
+                "user_text": user_text, 
+                "agent_reply": agent_reply,
+                "metrics": {
+                    "stt_total_time": stt_total_time,
+                    "stt_upload_time": stt_upload_time,
+                    "stt_processing_time": stt_processing_time,
+                    "llm_time": llm_time,
+                    "turn_count": conversation_state["turn_count"],
+                    "audio_size": len(audio_bytes),
+                    "audio_duration": audio_duration,
+                    "efficiency_ratio": efficiency_ratio
+                }
+            })
 
             # Step 4: Convert AI response to speech
             url = (
                 f"wss://api.elevenlabs.io/v1/text-to-speech/"
                 f"{VOICE_ID}/stream-input?model_id={MODEL_ID}"
             )
-            tts_t = time.time()
+            tts_start = time.time()
 
             async with aiohttp.ClientSession() as session:
                 async with session.ws_connect(url, max_msg_size=0) as el_ws:
@@ -315,7 +346,16 @@ Return ONLY the final conversational response, nothing else:"""
                                 break
                         elif msg.type is aiohttp.WSMsgType.ERROR:
                             break
-            print("[DEBUG] TTS stream gen time:", round(time.time() - tts_t, 3), "sec")
+            tts_time = round((time.time() - tts_start) * 1000)  # Convert to milliseconds
+            print("[DEBUG] TTS stream gen time:", tts_time, "ms")
+            
+            # Send TTS completion metrics
+            await ws.send_json({
+                "metrics": {
+                    "tts_time": tts_time,
+                    "total_response_time": stt_time + llm_time + tts_time
+                }
+            })
 
     except Exception as e:
         print(f"WebSocket error: {e}")

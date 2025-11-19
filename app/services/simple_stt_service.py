@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 ASSEMBLY_API_KEY = os.getenv("ASSEMBLY_API_KEY")
 
-def transcribe_audio_simple(audio_bytes: bytes) -> str:
+def transcribe_audio_simple(audio_bytes: bytes) -> dict:
     """
     Simple way to convert speech to text:
     1. Save audio file temporarily (WebM format is fine for AssemblyAI)
@@ -29,6 +29,9 @@ def transcribe_audio_simple(audio_bytes: bytes) -> str:
     try:
         print(f"[DEBUG] Processing audio file: {temp_path}")
         
+        # Track detailed timing
+        upload_start = time.time()
+        
         # Step 1: Upload the audio file to AssemblyAI
         with open(temp_path, 'rb') as audio_file:
             upload_response = requests.post(
@@ -40,16 +43,18 @@ def transcribe_audio_simple(audio_bytes: bytes) -> str:
                 data=audio_file
             )
         
+        upload_time = time.time() - upload_start
+        
         if upload_response.status_code != 200:
             print(f"[ERROR] Upload failed: {upload_response.text}")
-            return "[ERROR] Could not upload audio"
+            return {"text": "[ERROR] Could not upload audio", "upload_time": upload_time * 1000, "processing_time": 0, "total_time": upload_time * 1000}
         
         upload_url = upload_response.json().get("upload_url")
         if not upload_url:
-            return "[ERROR] Upload failed"
+            return {"text": "[ERROR] Upload failed", "upload_time": upload_time * 1000, "processing_time": 0, "total_time": upload_time * 1000}
         
         # Step 2: Ask AssemblyAI to transcribe the audio
-        # AssemblyAI supports WebM, WAV, MP3, MP4, and many other formats
+        processing_start = time.time()
         transcript_request = requests.post(
             'https://api.assemblyai.com/v2/transcript',
             json={
@@ -61,11 +66,13 @@ def transcribe_audio_simple(audio_bytes: bytes) -> str:
         
         if transcript_request.status_code != 200:
             print(f"[ERROR] Transcription request failed: {transcript_request.text}")
-            return "[ERROR] Could not start transcription"
+            processing_time = (time.time() - processing_start) * 1000
+            return {"text": "[ERROR] Could not start transcription", "upload_time": upload_time * 1000, "processing_time": processing_time, "total_time": (upload_time * 1000) + processing_time}
         
         transcript_id = transcript_request.json().get("id")
         if not transcript_id:
-            return "[ERROR] No transcript ID received"
+            processing_time = (time.time() - processing_start) * 1000
+            return {"text": "[ERROR] No transcript ID received", "upload_time": upload_time * 1000, "processing_time": processing_time, "total_time": (upload_time * 1000) + processing_time}
         
         # Step 3: Wait for AssemblyAI to finish processing
         polling_url = f"https://api.assemblyai.com/v2/transcript/{transcript_id}"
@@ -81,16 +88,36 @@ def transcribe_audio_simple(audio_bytes: bytes) -> str:
             result = result_response.json()
             
             if result["status"] == "completed":
-                # Success! Return the transcribed text
-                return result["text"] or "[No speech detected]"
+                # Success! Return the transcribed text with timing breakdown
+                processing_time = (time.time() - processing_start) * 1000
+                total_time = (upload_time * 1000) + processing_time
+                
+                # Get audio duration if available
+                audio_duration = result.get("audio_duration", 0)  # in seconds
+                
+                print(f"[DEBUG] STT Breakdown - Upload: {upload_time*1000:.0f}ms, Processing: {processing_time:.0f}ms, Total: {total_time:.0f}ms")
+                if audio_duration > 0:
+                    efficiency_ratio = audio_duration / (total_time / 1000)
+                    print(f"[DEBUG] Efficiency: {efficiency_ratio:.2f}x realtime (audio: {audio_duration:.1f}s, processing: {total_time/1000:.1f}s)")
+                
+                return {
+                    "text": result["text"] or "[No speech detected]",
+                    "upload_time": upload_time * 1000,
+                    "processing_time": processing_time,
+                    "total_time": total_time,
+                    "audio_duration": audio_duration,
+                    "efficiency_ratio": efficiency_ratio if audio_duration > 0 else 0
+                }
             elif result["status"] == "error":
                 print(f"[ERROR] AssemblyAI error: {result}")
-                return "[ERROR] Transcription failed"
+                processing_time = (time.time() - processing_start) * 1000
+                return {"text": "[ERROR] Transcription failed", "upload_time": upload_time * 1000, "processing_time": processing_time, "total_time": (upload_time * 1000) + processing_time}
             
             # Wait a bit before checking again
             time.sleep(1)
         
-        return "[ERROR] Transcription took too long"
+        processing_time = (time.time() - processing_start) * 1000
+        return {"text": "[ERROR] Transcription took too long", "upload_time": upload_time * 1000, "processing_time": processing_time, "total_time": (upload_time * 1000) + processing_time}
     
     finally:
         # Always clean up the temporary file

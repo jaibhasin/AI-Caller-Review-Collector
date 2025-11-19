@@ -10,94 +10,230 @@
 </head>
 <body>
     <div class="container">
-        <header class="header">
-            <div class="logo">
-                <i class="fas fa-microphone-alt"></i>
-                <h1>AI Voice Review Collector</h1>
+        <!-- Top Navigation Bar -->
+        <nav class="top-nav">
+            <div class="nav-brand">
+                <div class="brand-icon">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="brand-text">
+                    <h1>Sarah AI</h1>
+                    <span>Voice Review Collector</span>
+                </div>
             </div>
-            <div class="product-info">
-                <h2>Lifelong Professional Pickleball Set</h2>
-                <p>Complete set with durable fiberglass paddles and ergonomic grips</p>
+            <div class="nav-status">
+                <div class="status-badge" id="navStatus">
+                    <i class="fas fa-circle"></i>
+                    <span>Ready</span>
+                </div>
             </div>
-        </header>
+        </nav>
 
-        
         <main class="main-content">
-            <div class="call-interface">
-                <div class="status-display">
-                    <div class="connection-status" id="connectionStatus">
-                        <i class="fas fa-circle"></i>
-                        <span>Disconnected</span>
+            <!-- Left Sidebar - Controls -->
+            <aside class="control-sidebar">
+                <div class="product-card">
+                    <div class="product-icon">
+                        <i class="fas fa-table-tennis"></i>
                     </div>
-                    <div class="call-duration" id="callDuration">
-                        <i class="fas fa-clock"></i>
-                        <span>00:00</span>
-                    </div>
+                    <h3>Lifelong Professional Pickleball Set</h3>
+                    <p>Collecting customer feedback on product experience</p>
                 </div>
 
-                <div class="audio-controls">
-                    <button class="call-btn" id="startCallBtn">
-                        <i class="fas fa-phone"></i>
-                        <span>Start Call</span>
-                    </button>
-                    <button class="record-btn" id="recordBtn" disabled>
-                        <i class="fas fa-microphone"></i>
-                        <span>Click to Talk</span>
-                    </button>
-                    <button class="end-call-btn" id="endCallBtn" disabled>
-                        <i class="fas fa-phone-slash"></i>
-                        <span>End Call</span>
-                    </button>
-                </div>
-                
-                <div class="recording-status" id="recordingStatus" style="display: none;">
-                    <div class="recording-indicator">
-                        <i class="fas fa-circle"></i>
-                        <span>Recording... Click to stop</span>
+                <div class="call-controls">
+                    <div class="control-section">
+                        <h4>Call Status</h4>
+                        <div class="status-grid">
+                            <div class="status-item">
+                                <i class="fas fa-plug"></i>
+                                <div>
+                                    <span class="status-label">Connection</span>
+                                    <span class="status-value" id="connectionStatus">Disconnected</span>
+                                </div>
+                            </div>
+                            <div class="status-item">
+                                <i class="fas fa-clock"></i>
+                                <div>
+                                    <span class="status-label">Duration</span>
+                                    <span class="status-value" id="callDuration">00:00</span>
+                                </div>
+                            </div>
+                            <div class="status-item">
+                                <i class="fas fa-comments"></i>
+                                <div>
+                                    <span class="status-label">Turns</span>
+                                    <span class="status-value" id="turnCountDisplay">0</span>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
-                
-                <div class="instructions" id="instructions">
-                    <div class="instruction-item">
-                        <i class="fas fa-mouse-pointer"></i>
-                        <span>Click to start/stop talking</span>
-                    </div>
-                    <div class="instruction-item">
-                        <i class="fas fa-keyboard"></i>
-                        <span>Spacebar to toggle recording</span>
-                    </div>
-                    <div class="instruction-item">
-                        <i class="fas fa-times"></i>
-                        <span>Escape to end call</span>
-                    </div>
-                </div>
 
-                <div class="audio-visualizer" id="audioVisualizer">
-                    <div class="wave-bar"></div>
-                    <div class="wave-bar"></div>
-                    <div class="wave-bar"></div>
-                    <div class="wave-bar"></div>
-                    <div class="wave-bar"></div>
-                </div>
-            </div>
+                    <div class="control-section">
+                        <h4>Actions</h4>
+                        <button class="primary-btn" id="startCallBtn">
+                            <i class="fas fa-phone"></i>
+                            <span>Start Call</span>
+                        </button>
+                        <button class="record-btn" id="recordBtn" disabled>
+                            <i class="fas fa-microphone"></i>
+                            <span>Click to Talk</span>
+                        </button>
+                        <button class="danger-btn" id="endCallBtn" disabled>
+                            <i class="fas fa-phone-slash"></i>
+                            <span>End Call</span>
+                        </button>
+                    </div>
 
-            <div class="conversation-panel">
-                <div class="conversation-header">
-                    <h3><i class="fas fa-comments"></i> Conversation</h3>
-                    <button class="clear-btn" id="clearConversation">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-                <div class="conversation-content" id="conversationContent">
-                    <div class="message-placeholder">
-                        <i class="fas fa-comment-dots"></i>
-                        <p>Start a call to begin collecting feedback</p>
+                    <div class="recording-indicator" id="recordingStatus" style="display: none;">
+                        <div class="pulse-dot"></div>
+                        <span>Recording...</span>
+                    </div>
+
+                    <div class="audio-visualizer" id="audioVisualizer">
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                        <div class="wave-bar"></div>
+                    </div>
+
+                    <div class="shortcuts-info" id="instructions">
+                        <h4>Keyboard Shortcuts</h4>
+                        <div class="shortcut-item">
+                            <kbd>Space</kbd>
+                            <span>Toggle recording</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Esc</kbd>
+                            <span>End call</span>
+                        </div>
+                        <div class="shortcut-item">
+                            <kbd>Ctrl+D</kbd>
+                            <span>Toggle debug</span>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </aside>
+
+            <!-- Center - Conversation -->
+            <section class="conversation-section">
+                <div class="section-header">
+                    <h2><i class="fas fa-comments"></i> Live Conversation</h2>
+                    <button class="icon-btn" id="clearConversation" title="Clear conversation">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
+                <div class="conversation-feed" id="conversationContent">
+                    <div class="empty-state">
+                        <i class="fas fa-microphone-slash"></i>
+                        <h3>No Active Conversation</h3>
+                        <p>Start a call to begin collecting customer feedback</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Sidebar - Performance Metrics -->
+            <aside class="metrics-sidebar">
+                <div class="section-header">
+                    <h2><i class="fas fa-tachometer-alt"></i> Performance</h2>
+                </div>
+                <div class="metrics-content" id="debugContent">
+                    <div class="metric-group">
+                        <h4><i class="fas fa-microphone"></i> Audio Processing</h4>
+                        <div class="metric-item">
+                            <span class="metric-label">STT Total:</span>
+                            <span class="metric-value" id="sttTime">--</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">├ Upload:</span>
+                            <span class="metric-value" id="sttUploadTime">--</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">└ Processing:</span>
+                            <span class="metric-value" id="sttProcessingTime">--</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Audio Length:</span>
+                            <span class="metric-value" id="audioLength">--</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Efficiency Ratio:</span>
+                            <span class="metric-value" id="efficiencyRatio">--</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Audio Format:</span>
+                            <span class="metric-value" id="audioFormat">--</span>
+                        </div>
+                    </div>
+
+                    <div class="metric-group">
+                        <h4><i class="fas fa-brain"></i> AI Processing</h4>
+                        <div class="metric-item">
+                            <span class="metric-label">LLM Time:</span>
+                            <span class="metric-value" id="llmTime">--</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Response Length:</span>
+                            <span class="metric-value" id="responseLength">--</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Turn Count:</span>
+                            <span class="metric-value" id="turnCount">0</span>
+                        </div>
+                    </div>
+
+                    <div class="metric-group">
+                        <h4><i class="fas fa-volume-up"></i> Voice Synthesis</h4>
+                        <div class="metric-item">
+                            <span class="metric-label">TTS Time:</span>
+                            <span class="metric-value" id="ttsTime">--</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Voice Model:</span>
+                            <span class="metric-value" id="voiceModel">Rachel (ElevenLabs)</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Audio Chunks:</span>
+                            <span class="metric-value" id="audioChunks">--</span>
+                        </div>
+                    </div>
+
+                    <div class="metric-group">
+                        <h4><i class="fas fa-tachometer-alt"></i> Performance</h4>
+                        <div class="metric-item">
+                            <span class="metric-label">Total Response:</span>
+                            <span class="metric-value" id="totalResponse">--</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">WebSocket Latency:</span>
+                            <span class="metric-value" id="wsLatency">--</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-label">Connection Status:</span>
+                            <span class="metric-value" id="connectionHealth">Disconnected</span>
+                        </div>
+                    </div>
+
+                    <div class="metric-group">
+                        <h4><i class="fas fa-chart-bar"></i> Session Stats</h4>
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <span class="stat-number" id="totalCalls">0</span>
+                                <span class="stat-label">Total Calls</span>
+                            </div>
+                            <div class="stat-card">
+                                <span class="stat-number" id="reviewsCollected">0</span>
+                                <span class="stat-label">Reviews</span>
+                            </div>
+                            <div class="stat-card">
+                                <span class="stat-number" id="avgDuration">0:00</span>
+                                <span class="stat-label">Avg Duration</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </aside>
         </main>
-
-        <footer class="footer">
             <div class="stats">
                 <div class="stat-item">
                     <span class="stat-label">Total Calls</span>
@@ -111,8 +247,6 @@
                     <span class="stat-label">Avg Call Duration</span>
                     <span class="stat-value" id="avgDuration">0:00</span>
                 </div>
-            </div>
-        </footer>
     </div>
 
     <div class="toast" id="toast">
