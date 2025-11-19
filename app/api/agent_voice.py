@@ -18,16 +18,18 @@ GOOGLE_API_KEY = os.getenv("SECRET_KEY_GOOGLE_AI")  # Ensure this exists
 
 # Initialize LLM with better settings for conversation
 llm = ChatGoogleGenerativeAI(
-    model='gemini-2.0-flash-exp',  # Use the more advanced model
+    model='gemini-2.5-flash',  # Use the most advanced model
     google_api_key=GOOGLE_API_KEY,
-    temperature=0.7,  # Make responses more natural and varied
-    max_tokens=100    # Keep responses concise but not too short
+    temperature=0.8,   # More creative and natural responses
+    max_tokens=150,    # Allow longer, more natural responses
+    top_p=0.9         # Better response variety
 )
 
 
 from langchain.chains import ConversationChain
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import BaseMessage, HumanMessage, AIMessage
+import json
 
 
 API_KEY  = os.getenv("ELEVEN_LABS_API_KEY")
@@ -40,45 +42,39 @@ MODEL_ID = "eleven_turbo_v2_5"
 router = APIRouter()
 
 
-BASE_PROMPT = """You are Sarah, a friendly customer experience specialist calling to chat about the Lifelong Professional Pickleball Set you purchased. You're genuinely curious about their experience and want to have a natural conversation.
+BASE_PROMPT = """You are Sarah, a customer service representative from Lifelong company. You are CALLING the customer to ask about their experience with the Lifelong Professional Pickleball Set they purchased.
 
-Your personality:
-- Warm, conversational, and genuinely interested
-- Speak like a real person, not a robot
-- Use casual language and natural speech patterns
-- Show empathy and enthusiasm
-- Keep responses under 30 words but don't sound rushed
+IMPORTANT ROLE CLARITY:
+- YOU are Sarah from Lifelong (the company)
+- The HUMAN is the customer who bought the pickleball set
+- YOU are asking THEM about their experience
+- DO NOT respond as if you are the customer
+- DO NOT say things like "Hi Sarah" - YOU ARE Sarah
 
-Conversation flow:
-- Start with a warm greeting and check if it's a good time to chat
-- Ask about their overall experience first
-- Follow up based on what they say (be a good listener!)
-- Ask about specific aspects naturally (comfort, durability, performance)
-- If they're happy, ask what they love most
-- If they have issues, show understanding and ask for details
-- End warmly and thank them for their time
+Your job as Sarah:
+- Ask the customer about their experience with the pickleball set
+- Listen to their feedback and respond appropriately
+- Be warm, friendly, and genuinely interested in their experience
+- Speak naturally and take your time
 
-Remember: This should feel like talking to a friend who works in customer service, not a survey bot.
+How to respond as Sarah:
+1. Acknowledge what the customer just told you
+2. Show genuine interest in their experience  
+3. Ask follow-up questions about the product
+4. Use their words when responding ("You mentioned the grip...")
 
-Example responses:
-- "Oh that's awesome! What do you love most about them?"
-- "I'm so sorry to hear that! Can you tell me what happened?"
-- "That's exactly what we were hoping for! How's the grip feeling?"
-- "Interesting! Have you noticed any difference in your game?"
-- "Thanks for sharing that! Is there anything else you'd like me to know?"
-- "Perfect! Well I really appreciate you taking the time to chat with me."
+Example responses (YOU as Sarah speaking TO the customer):
+- "Oh that's wonderful to hear! What do you love most about the set?"
+- "I'm so glad you're enjoying it! How has the grip been working for you?"
+- "That's exactly what we hoped for! Has it helped improve your game at all?"
+- "Oh no, I'm sorry to hear that. Can you tell me what happened?"
 
-Conversation guidelines:
-- If they seem busy or short, offer to call back later
-- If they're very positive, focus on what they love most
-- If they have complaints, be empathetic and get details
-- After 4-5 exchanges, start thinking about wrapping up naturally
-- Always end on a positive, grateful note
+REMEMBER: You are Sarah calling them, not the other way around!
 
 Current conversation:
 {history}
 Human: {input}
-Assistant:"""
+Sarah:"""
 
 prompt = PromptTemplate.from_template(BASE_PROMPT)
 
@@ -100,6 +96,10 @@ async def agent_voice(ws: WebSocket):
         memory=memory
     )
     
+    # Add initial system context to prevent role confusion
+    memory.chat_memory.add_message(HumanMessage(content="[SYSTEM: You are Sarah from Lifelong calling the customer about their pickleball set purchase]"))
+    memory.chat_memory.add_message(AIMessage(content="Understood. I am Sarah from Lifelong calling to ask about their experience."))
+    
     # Track conversation state to make it smarter
     conversation_state = {
         "topics_covered": [],
@@ -117,8 +117,8 @@ async def agent_voice(ws: WebSocket):
     try : 
         
         
-        # Generate initial greeting - make it sound natural and warm
-        initial_reply = conversation.predict(input="Hi! This is Sarah calling from Lifelong. How are you doing today? I hope I'm not catching you at a bad time - I just wanted to check in about the pickleball set you ordered from us!").strip()
+        # Generate initial greeting - make it clear who Sarah is
+        initial_reply = "Hi there! This is Sarah calling from Lifelong. I hope you're having a good day. I wanted to give you a quick call about the pickleball set you got from us recently. Is this an okay time to chat for just a minute?"
         await ws.send_json({"user_text": "Call started", "agent_reply": initial_reply}) # where is this sending and what is it sending which format 
 
         # Stream initial greeting audio
@@ -131,12 +131,14 @@ async def agent_voice(ws: WebSocket):
                     "text": " ",
                     "xi_api_key": API_KEY,
                     "voice_settings": {
-                        "stability": 0.5,        # More stable for natural conversation
-                        "similarity_boost": 0.8,  # Slightly less aggressive
-                        "use_speaker_boost": True, # Better for phone-like quality
-                        "style": 0.2              # Add some conversational style
+                        "stability": 0.8,         # Much more stable, less rushed
+                        "similarity_boost": 0.7,   # Softer, more natural voice
+                        "use_speaker_boost": True,
+                        "style": 0.3              # More conversational but not too much
                     },
-                    "generation_config": {"chunk_length_schedule": [50, 100]}
+                    "generation_config": {
+                        "chunk_length_schedule": [80, 120]  # Longer chunks = smoother speech
+                    }
                 })
                 await el_ws.send_json({"text": initial_reply, "flush": True})
                 await el_ws.send_json({"text": ""})
@@ -187,40 +189,10 @@ async def agent_voice(ws: WebSocket):
             # Update conversation state
             conversation_state["turn_count"] += 1
             
-            # Analyze customer sentiment from their response
-            user_lower = user_text.lower()
-            if any(word in user_lower for word in ["love", "great", "awesome", "amazing", "perfect", "excellent"]):
-                conversation_state["customer_sentiment"] = "positive"
-            elif any(word in user_lower for word in ["hate", "terrible", "awful", "bad", "broken", "disappointed"]):
-                conversation_state["customer_sentiment"] = "negative"
-            elif any(word in user_lower for word in ["okay", "fine", "alright", "decent"]):
-                conversation_state["customer_sentiment"] = "neutral"
+            # Add context with clear role reminder
+            context_input = f"Customer said: '{user_text}'"
+            context_input += " [REMEMBER: You are Sarah from Lifelong calling THEM about their purchase. Do not respond as the customer.]"
             
-            # Track topics mentioned
-            if any(word in user_lower for word in ["grip", "handle", "comfortable"]):
-                if "grip_comfort" not in conversation_state["topics_covered"]:
-                    conversation_state["topics_covered"].append("grip_comfort")
-            if any(word in user_lower for word in ["durable", "quality", "build", "material"]):
-                if "durability" not in conversation_state["topics_covered"]:
-                    conversation_state["topics_covered"].append("durability")
-            if any(word in user_lower for word in ["game", "play", "performance", "better"]):
-                if "performance" not in conversation_state["topics_covered"]:
-                    conversation_state["topics_covered"].append("performance")
-            
-            # Build smarter context for AI
-            context_input = user_text
-            
-            # Add sentiment context
-            if conversation_state["customer_sentiment"] == "positive":
-                context_input += " [Customer seems happy - focus on what they love most]"
-            elif conversation_state["customer_sentiment"] == "negative":
-                context_input += " [Customer has concerns - be empathetic and get details]"
-            
-            # Add topic context to avoid repetition
-            if len(conversation_state["topics_covered"]) > 0:
-                context_input += f" [Already discussed: {', '.join(conversation_state['topics_covered'])}]"
-            
-            # Add turn management
             if conversation_state["turn_count"] > 5:
                 context_input += f" [Turn {conversation_state['turn_count']} - consider wrapping up soon]"
             
@@ -229,6 +201,18 @@ async def agent_voice(ws: WebSocket):
             # Clean up the response (remove any system notes)
             if "[Note:" in agent_reply:
                 agent_reply = agent_reply.split("[Note:")[0].strip()
+            
+            # Check for role confusion and fix it
+            if any(phrase in agent_reply.lower() for phrase in ["hi sarah", "hello sarah", "thanks for calling", "this is a good time"]):
+                # AI is responding as customer - fix this
+                agent_reply = "Oh wonderful! I'm so glad to hear you're available to chat. How has your experience been with the pickleball set so far?"
+                print("[DEBUG] Fixed role confusion in AI response")
+            
+            # Add natural pauses to make speech less rushed
+            agent_reply = agent_reply.replace("! ", "!... ")  # Pause after excitement
+            agent_reply = agent_reply.replace(". ", "... ")   # Longer pauses between sentences
+            if not agent_reply.endswith((".", "!", "?")):
+                agent_reply += "."  # Ensure proper ending
             
             print("[DEBUG] LLM response time:", round(time.time() - llm_time1, 3), "sec")
             print("[DEBUG] Agent reply:", agent_reply)
@@ -249,12 +233,14 @@ async def agent_voice(ws: WebSocket):
                         "text": " ",
                         "xi_api_key": API_KEY,
                         "voice_settings": {
-                            "stability": 0.5,        # More stable for natural conversation
-                            "similarity_boost": 0.8,  # Good balance
-                            "use_speaker_boost": True, # Better for phone-like quality
-                            "style": 0.2              # Add some conversational style
+                            "stability": 0.8,         # Much more stable, less rushed
+                            "similarity_boost": 0.7,   # Softer, more natural voice
+                            "use_speaker_boost": True,
+                            "style": 0.3              # More conversational but not too much
                         },
-                        "generation_config": {"chunk_length_schedule": [50, 100]}
+                        "generation_config": {
+                            "chunk_length_schedule": [80, 120]  # Longer chunks = smoother speech
+                        }
                     })
 
                     # send LLM reply
