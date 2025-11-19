@@ -42,6 +42,8 @@ class VoiceReviewCollector {
         this.callDuration = document.getElementById('callDuration');
         this.conversationContent = document.getElementById('conversationContent');
         this.audioVisualizer = document.getElementById('audioVisualizer');
+        this.recordingStatus = document.getElementById('recordingStatus');
+        this.instructions = document.getElementById('instructions');
         
         // Stats elements
         this.totalCallsEl = document.getElementById('totalCalls');
@@ -58,20 +60,11 @@ class VoiceReviewCollector {
         this.endCallBtn.addEventListener('click', () => this.endCall());
         this.clearBtn.addEventListener('click', () => this.clearConversation());
         
-        // Record button - hold to talk
-        this.recordBtn.addEventListener('mousedown', () => this.startRecording());
-        this.recordBtn.addEventListener('mouseup', () => this.stopRecording());
-        this.recordBtn.addEventListener('mouseleave', () => this.stopRecording());
+        // Record button - click to talk/click to stop
+        this.recordBtn.addEventListener('click', () => this.toggleRecording());
         
-        // Touch events for mobile
-        this.recordBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            this.startRecording();
-        });
-        this.recordBtn.addEventListener('touchend', (e) => {
-            e.preventDefault();
-            this.stopRecording();
-        });
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => this.handleKeyPress(e));
     }
     
     async startCall() {
@@ -170,13 +163,24 @@ class VoiceReviewCollector {
         }
     }
     
+    toggleRecording() {
+        if (!this.isConnected) return;
+        
+        if (this.isRecording) {
+            this.stopRecording();
+        } else {
+            this.startRecording();
+        }
+    }
+    
     async startRecording() {
         if (!this.isConnected || this.isRecording) return;
         
         try {
             this.isRecording = true;
             this.recordBtn.classList.add('recording');
-            this.recordBtn.innerHTML = '<i class="fas fa-stop"></i><span>Recording...</span>';
+            this.recordBtn.innerHTML = '<i class="fas fa-stop-circle"></i><span>Click to Stop</span>';
+            this.recordingStatus.style.display = 'block';
             this.startAudioVisualizer();
             
             this.audioChunks = [];
@@ -229,7 +233,8 @@ class VoiceReviewCollector {
         
         this.isRecording = false;
         this.recordBtn.classList.remove('recording');
-        this.recordBtn.innerHTML = '<i class="fas fa-microphone"></i><span>Hold to Talk</span>';
+        this.recordBtn.innerHTML = '<i class="fas fa-microphone"></i><span>Click to Talk</span>';
+        this.recordingStatus.style.display = 'none';
         this.stopAudioVisualizer();
         
         if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
@@ -458,6 +463,20 @@ class VoiceReviewCollector {
         if (savedStats) {
             this.stats = { ...this.stats, ...JSON.parse(savedStats) };
             this.updateStats();
+        }
+    }
+    
+    handleKeyPress(event) {
+        // Spacebar to toggle recording (when connected)
+        if (event.code === 'Space' && this.isConnected) {
+            event.preventDefault();
+            this.toggleRecording();
+        }
+        
+        // Escape to end call
+        if (event.code === 'Escape' && this.isConnected) {
+            event.preventDefault();
+            this.endCall();
         }
     }
     

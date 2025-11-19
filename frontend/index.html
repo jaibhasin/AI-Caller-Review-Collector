@@ -42,12 +42,34 @@
                     </button>
                     <button class="record-btn" id="recordBtn" disabled>
                         <i class="fas fa-microphone"></i>
-                        <span>Hold to Talk</span>
+                        <span>Click to Talk</span>
                     </button>
                     <button class="end-call-btn" id="endCallBtn" disabled>
                         <i class="fas fa-phone-slash"></i>
                         <span>End Call</span>
                     </button>
+                </div>
+                
+                <div class="recording-status" id="recordingStatus" style="display: none;">
+                    <div class="recording-indicator">
+                        <i class="fas fa-circle"></i>
+                        <span>Recording... Click to stop</span>
+                    </div>
+                </div>
+                
+                <div class="instructions" id="instructions">
+                    <div class="instruction-item">
+                        <i class="fas fa-mouse-pointer"></i>
+                        <span>Click to start/stop talking</span>
+                    </div>
+                    <div class="instruction-item">
+                        <i class="fas fa-keyboard"></i>
+                        <span>Spacebar to toggle recording</span>
+                    </div>
+                    <div class="instruction-item">
+                        <i class="fas fa-times"></i>
+                        <span>Escape to end call</span>
+                    </div>
                 </div>
 
                 <div class="audio-visualizer" id="audioVisualizer">

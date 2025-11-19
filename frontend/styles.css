@@ -190,6 +190,62 @@ button:disabled {
     transform: none !important;
 }
 
+/* Recording status indicator */
+.recording-status {
+    margin-top: 20px;
+    padding: 15px 25px;
+    background: rgba(229, 62, 62, 0.1);
+    border: 2px solid #e53e3e;
+    border-radius: 25px;
+    text-align: center;
+}
+
+.recording-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: #e53e3e;
+    font-weight: 600;
+}
+
+.recording-indicator i {
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0.3; }
+}
+
+/* Instructions panel */
+.instructions {
+    margin-top: 30px;
+    padding: 20px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 15px;
+    backdrop-filter: blur(10px);
+}
+
+.instruction-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+    color: #4a5568;
+    font-size: 0.9rem;
+}
+
+.instruction-item:last-child {
+    margin-bottom: 0;
+}
+
+.instruction-item i {
+    width: 20px;
+    text-align: center;
+    color: #667eea;
+}
+
 /* Audio visualizer */
 .audio-visualizer {
     display: flex;
