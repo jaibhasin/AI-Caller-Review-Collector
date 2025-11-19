@@ -180,8 +180,26 @@ class VoiceReviewCollector {
             this.startAudioVisualizer();
             
             this.audioChunks = [];
+            // Use WebM format (most widely supported by browsers)
+            // We'll handle the conversion on the server side
+            let mimeType = 'audio/webm;codecs=opus';
+            
+            // Check what the browser actually supports
+            if (!MediaRecorder.isTypeSupported(mimeType)) {
+                // Fallback options
+                if (MediaRecorder.isTypeSupported('audio/webm')) {
+                    mimeType = 'audio/webm';
+                } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+                    mimeType = 'audio/mp4';
+                } else {
+                    console.warn('No supported audio format found, using default');
+                    mimeType = '';
+                }
+            }
+            
+            console.log('Using audio format:', mimeType);
             this.mediaRecorder = new MediaRecorder(this.audioStream, {
-                mimeType: 'audio/webm;codecs=opus'
+                mimeType: mimeType
             });
             
             this.mediaRecorder.ondataavailable = (event) => {
@@ -191,14 +209,9 @@ class VoiceReviewCollector {
             };
             
             this.mediaRecorder.onstop = async () => {
-                const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+                // When recording stops, send the audio to server
+                const audioBlob = new Blob(this.audioChunks, { type: mimeType });
                 this.sendAudioToServer(audioBlob);
-
-                setTimeout(() => {
-                    // Send PCM silence, not webm
-                    const silence = new Uint8Array(1600); // 1600 bytes silence
-                    this.ws.send(silence);
-                }, 60);
             };
 
             
@@ -279,119 +292,82 @@ class VoiceReviewCollector {
     }
     
     handleAudioChunk(audioData) {
-        // Start buffering audio chunks
+        // Simple approach: collect chunks and play when done
         if (!this.isReceivingAudio) {
             this.isReceivingAudio = true;
             this.currentAudioChunks = [];
-            console.log('Started receiving audio stream');
+            console.log('Started receiving audio');
         }
         
-        // Add chunk to buffer
+        // Add this chunk to our collection
         this.currentAudioChunks.push(audioData);
-        console.log(`Buffering chunk ${this.currentAudioChunks.length}, size:`, audioData.byteLength || audioData.size);
+        console.log(`Got audio chunk ${this.currentAudioChunks.length}`);
         
-        // Reset timeout - if no new chunks arrive within 100ms, play the buffered audio
+        // Wait a bit for more chunks, then play everything
         clearTimeout(this.audioTimeoutId);
         this.audioTimeoutId = setTimeout(() => {
-            this.playBufferedAudio();
-        }, 100);
+            this.playAllAudioChunks();
+        }, 150); // Wait 150ms for more chunks
     }
     
-    async playBufferedAudio() {
+    async playAllAudioChunks() {
         if (this.currentAudioChunks.length === 0) {
             this.isReceivingAudio = false;
             return;
         }
         
-        console.log(`Playing ${this.currentAudioChunks.length} buffered chunks`);
-        const chunksToPlay = [...this.currentAudioChunks];
+        console.log(`Playing ${this.currentAudioChunks.length} audio chunks`);
+        
+        // Combine all chunks into one audio file
+        const completeAudio = new Blob(this.currentAudioChunks, { type: 'audio/mpeg' });
+        
+        // Reset for next audio
         this.currentAudioChunks = [];
         this.isReceivingAudio = false;
         
-        // Combine all chunks into single blob
-        const completeAudioBlob = new Blob(chunksToPlay, { type: 'audio/mpeg' });
-        console.log('Combined audio blob size:', completeAudioBlob.size, 'bytes');
-        
-        // Play using queue
-        await this.playAudioResponse(completeAudioBlob);
+        // Play the complete audio
+        await this.playAudioResponse(completeAudio);
     }
     
     async playAudioResponse(audioData) {
-        // Use sequential queue-based playback to prevent overlap and ensure reliability
+        // Simplified audio playback - just use HTML5 Audio (works better)
         this.audioQueue = this.audioQueue.then(async () => {
             try {
-                if (!this.audioContext) {
-                    console.error('AudioContext not initialized - user must click Start Call first');
+                // Convert audio data to a blob that browser can play
+                const audioBlob = audioData instanceof Blob ? 
+                    audioData : 
+                    new Blob([audioData], { type: 'audio/mpeg' });
+                
+                if (audioBlob.size === 0) {
+                    console.warn('Empty audio, skipping');
                     return;
                 }
                 
-                console.log('Playing audio, AudioContext state:', this.audioContext.state);
+                // Create a temporary URL for the audio
+                const audioUrl = URL.createObjectURL(audioBlob);
+                const audio = new Audio(audioUrl);
                 
-                // Convert to ArrayBuffer
-                let arrayBuffer;
-                if (audioData instanceof Blob) {
-                    arrayBuffer = await audioData.arrayBuffer();
-                } else if (audioData instanceof ArrayBuffer) {
-                    arrayBuffer = audioData;
-                } else {
-                    arrayBuffer = await new Blob([audioData], { type: 'audio/mpeg' }).arrayBuffer();
-                }
-                
-                if (arrayBuffer.byteLength === 0) {
-                    console.warn('Empty audio buffer, skipping');
-                    return;
-                }
-                
-                console.log('Decoding', arrayBuffer.byteLength, 'bytes...');
-                
-                // Decode audio data using global AudioContext
-                const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
-                console.log('Decoded:', audioBuffer.duration.toFixed(2), 'seconds');
-                
-                // Create and configure buffer source
-                const source = this.audioContext.createBufferSource();
-                source.buffer = audioBuffer;
-                source.connect(this.audioContext.destination);
-                
-                // Play audio and wait for it to complete
+                // Play the audio and wait for it to finish
                 return new Promise((resolve) => {
-                    source.onended = () => {
-                        console.log('Playback completed');
+                    audio.onended = () => {
+                        URL.revokeObjectURL(audioUrl); // Clean up memory
+                        console.log('Audio finished playing');
                         resolve();
                     };
-                    source.start();
-                    console.log('Audio playing...');
+                    audio.onerror = (e) => {
+                        console.error('Audio playback error:', e);
+                        URL.revokeObjectURL(audioUrl);
+                        resolve();
+                    };
+                    audio.play().catch(e => {
+                        console.error('Could not play audio:', e);
+                        URL.revokeObjectURL(audioUrl);
+                        resolve();
+                    });
                 });
                 
             } catch (error) {
-                console.error('Error playing audio:', error.name, error.message);
-                // Fallback to HTML5 Audio for better MP3 compatibility
-                try {
-                    console.log('Trying HTML5 Audio fallback...');
-                    const audioBlob = audioData instanceof Blob ? audioData : new Blob([audioData], { type: 'audio/mpeg' });
-                    const audioUrl = URL.createObjectURL(audioBlob);
-                    const audio = new Audio(audioUrl);
-                    
-                    return new Promise((resolve) => {
-                        audio.onended = () => {
-                            URL.revokeObjectURL(audioUrl);
-                            console.log('HTML5 Audio playback completed');
-                            resolve();
-                        };
-                        audio.onerror = (e) => {
-                            console.error('HTML5 Audio error:', e);
-                            URL.revokeObjectURL(audioUrl);
-                            resolve();
-                        };
-                        audio.play().catch(e => {
-                            console.error('HTML5 play failed:', e);
-                            URL.revokeObjectURL(audioUrl);
-                            resolve();
-                        });
-                    });
-                } catch (fallbackError) {
-                    console.error('Fallback also failed:', fallbackError);
-                }
+                console.error('Audio processing error:', error);
             }
         }).catch(error => {
             console.error('Audio queue error:', error);

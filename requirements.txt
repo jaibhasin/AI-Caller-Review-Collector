@@ -7,8 +7,8 @@ langchain==0.1.0
 langchain-community==0.0.10
 langchain-google-genai==0.0.5
 
-# Speech-to-Text
-assemblyai[extras]==0.25.0
+# Speech-to-Text (simple version)
+requests==2.31.0
 
 # HTTP and WebSocket
 aiohttp==3.9.1
@@ -16,13 +16,3 @@ websockets==12.0
 
 # Environment and Configuration
 python-dotenv==1.0.0
-
-# Data Processing
-requests==2.31.0
-
-# Audio Processing (optional, for Whisper service)
-# pyaudio==0.2.14
-# soundfile==0.12.1
-# numpy==1.24.3
-# faster-whisper==0.10.0
-# onnxruntime==1.16.3

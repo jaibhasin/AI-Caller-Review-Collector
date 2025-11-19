@@ -1,12 +1,8 @@
 import os, json, base64, aiohttp
 from fastapi import APIRouter, WebSocket
 from dotenv import load_dotenv
-# from app.services.stt2_service import transcribe_audio # stt 
-from app.services.stt_streaming_service import AAIStreamingSTT # new thing , for STT
-
-# from app.services.mock_stt_service import transcribe_audio  # Fallback if needed
-# from app.services.whisper_service import transcribe_audio
-# from app.services.llm_service import generate_response
+# Use the simple STT service instead of complex streaming
+from app.services.simple_stt_service import transcribe_audio_simple
 from langchain.prompts import PromptTemplate
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -42,16 +38,25 @@ MODEL_ID = "eleven_turbo_v2_5"
 router = APIRouter()
 
 
-BASE_PROMPT = """You are an AI phone agent gathering concise customer feedback about the Lifelong Professional Pickleball Set - a complete set with durable fiberglass paddles and ergonomic grips.
+BASE_PROMPT = """You are Sarah, a friendly customer experience specialist calling to chat about the Lifelong Professional Pickleball Set you purchased. You're genuinely curious about their experience and want to have a natural conversation.
 
-Guidelines for every reply (≤ 25 words):
-1. Greet or respond politely.
-2. Ask one clear question about the product's quality, features, or user experience.
-3. If the caller answers clearly, thank them and sign off.
-4. If the answer is vague, ask one follow-up for clarification.
-5. No explanations about yourself or the system.
-6. Mirror the caller's language; default to English if unsure.
-7. Never exceed 25 words.
+Your personality:
+- Warm, conversational, and genuinely interested
+- Speak like a real person, not a robot
+- Use casual language and natural speech patterns
+- Show empathy and enthusiasm
+- Keep responses under 30 words but don't sound rushed
+
+Conversation flow:
+- Start with a warm greeting and check if it's a good time to chat
+- Ask about their overall experience first
+- Follow up based on what they say (be a good listener!)
+- Ask about specific aspects naturally (comfort, durability, performance)
+- If they're happy, ask what they love most
+- If they have issues, show understanding and ask for details
+- End warmly and thank them for their time
+
+Remember: This should feel like talking to a friend who works in customer service, not a survey bot.
 
 Current conversation:
 {history}
@@ -62,18 +67,21 @@ prompt = PromptTemplate.from_template(BASE_PROMPT)
 
 
 @router.websocket("/agent/voice")
-async def agent_voice(ws: WebSocket): # async means and what is ws: Websocket
-    await ws.accept() # what does await and accpet mean
-    memory = ConversationBufferMemory()
+async def agent_voice(ws: WebSocket):
+    """
+    This function handles the voice conversation:
+    1. Accepts connection from frontend
+    2. Sets up AI conversation memory
+    3. Processes audio back and forth
+    """
+    await ws.accept()  # Accept the connection from frontend
+    memory = ConversationBufferMemory()  # Remember conversation history
     
     conversation = ConversationChain(
         llm=llm,
         prompt=prompt,
         memory=memory
     )
-
-    stream_stt = AAIStreamingSTT(sample_rate=16000, format_turns=False)
-    stream_stt.start()
 
     PRODUCT_NAME = "Lifelong Professional Pickleball Set"
     PRODUCT_DESC = (
@@ -84,14 +92,14 @@ async def agent_voice(ws: WebSocket): # async means and what is ws: Websocket
     try : 
         
         
-        # Generate initial greeting
-        initial_reply = conversation.predict(input="Hello, I'm calling to get your feedback on our Lifelong Professional Pickleball Set. How has your experience been?").strip()
+        # Generate initial greeting - make it sound natural
+        initial_reply = conversation.predict(input="Hi there! This is Sarah from Lifelong. I hope I'm catching you at a good time? I wanted to chat about the pickleball set you got from us recently.").strip()
         await ws.send_json({"user_text": "Call started", "agent_reply": initial_reply}) # where is this sending and what is it sending which format 
 
         # Stream initial greeting audio
         url = f"wss://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}/stream-input?model_id={MODEL_ID}" # is there a websocket on that end as well , could we access it if this wasnt a websocket
         
-        debug_path = f"/tmp/eleven_{int(time.time()*1000)}.raw"
+
         async with aiohttp.ClientSession() as session:   # what is aiohttp ? is it a websocket or what 
             async with session.ws_connect(url, max_msg_size=0) as el_ws: #what is session.ws_connect
                 await el_ws.send_json({ # what is el_ws
@@ -110,17 +118,10 @@ async def agent_voice(ws: WebSocket): # async means and what is ws: Websocket
                     if msg.type is aiohttp.WSMsgType.TEXT:
                         data = json.loads(msg.data)
                         audio_b64 = data.get("audio")
-                        # if audio_b64:
-                        #     await ws.send_bytes(base64.b64decode(audio_b64))
-                        if audio_b64:                       # what is base64 here 
+                        if audio_b64:
+                            # Convert the audio data and send to frontend
                             chunk = base64.b64decode(audio_b64)
-
-                            # send to frontend (existing behavior)
-                            await ws.send_bytes(chunk) # now are we receiving and sending audio in stream or full thing 
-
-                            # also save locally to debug
-                            # with open(debug_path, "ab") as f:
-                            #     f.write(chunk)
+                            await ws.send_bytes(chunk)
                         else:
                             print("[DEBUG] No audio in this packet")
                             print(data)
@@ -129,66 +130,44 @@ async def agent_voice(ws: WebSocket): # async means and what is ws: Websocket
                     elif msg.type is aiohttp.WSMsgType.ERROR:
                         break
 
-        while True : 
-
-            # 1️⃣ receive caller audio
-            # print('[DEBUG] Waiting for caller audio...')
-            first = await ws.receive() # now we are receiving audio from the caller frontend?
+        while True:
+            # Step 1: Receive audio from user
+            first = await ws.receive()
             if first["type"] != "websocket.receive" or "bytes" not in first:
                 await ws.close(code=4000)
                 return
             audio_bytes = first["bytes"]
 
-            print(f"[DEBUG] Received audio bytes: {len(audio_bytes)} bytes")
+            print(f"[DEBUG] Received audio: {len(audio_bytes)} bytes")
 
-            # 2️⃣ STT ➜ LLM
-            # try:
-            #     print(f"[DEBUG] Received audio bytes: {len(audio_bytes)} bytes")
-            #     st = time.time()
-            #     user_text = transcribe_audio(audio_bytes)
-            #     print("[DEBUG] Transcribed text:", user_text)
-            #     print("[DEBUG] STT time:", round(time.time() - st, 3), "sec")
+            # Step 2: Convert speech to text
 
-            #     if "[ERROR]" in user_text or not user_text.strip():
-            #         await ws.send_json({"error": "Transcription failed or empty"})
-            #         return
-            # except Exception as e:
-            #     print(f"[ERROR] STT failed: {e}")
-            #     await ws.send_json({"error": "Internal transcription error"})
-            #     return
-
-            # new try using streaming STT
+            # Use simple STT - much easier and faster
             st = time.time()
-            stream_stt.feed_webm(audio_bytes) # now are we sending webm audio to the STT service?
-
-            # Wait for a final turn (end_of_turn) up to 5s (usually ~0.3–0.6s)
-            user_text = stream_stt.get_final_turn(timeout=5.0) # what is get_final_turn doing here. is it getting stream also ?
-            if not user_text:
-                await ws.send_json({"error": "No finalized transcript yet"})
-                continue  # skip this iteration and read more audio
-
+            user_text = transcribe_audio_simple(audio_bytes)
+            
             print("[DEBUG] Transcribed text:", user_text)
-            print("[DEBUG] STT(stream) time:", round(time.time() - st, 3), "sec")
+            print("[DEBUG] STT time:", round(time.time() - st, 3), "sec")
+            
+            # Check if transcription failed
+            if "[ERROR]" in user_text or not user_text.strip():
+                await ws.send_json({"error": "Could not understand audio"})
+                continue
 
 
-            # agent_reply = generate_response(user_text)
-            # full_prompt = f"{BASE_PROMPT}\nUser: {user_text}\nAgent:"
-            # agent_reply = conversation.run(full_prompt)
-
-            # Generate AI response using conversation chain
+            # Step 3: Generate AI response
             llm_time1 = time.time()
             agent_reply = conversation.predict(input=user_text).strip()
             print("[DEBUG] LLM response time:", round(time.time() - llm_time1, 3), "sec")
             print("[DEBUG] Agent reply:", agent_reply)
             await ws.send_json({"user_text": user_text, "agent_reply": agent_reply})
 
-            # 3️⃣ ElevenLabs streaming (aiohttp WebSocket)
+            # Step 4: Convert AI response to speech
             url = (
                 f"wss://api.elevenlabs.io/v1/text-to-speech/"
                 f"{VOICE_ID}/stream-input?model_id={MODEL_ID}"
             )
             tts_t = time.time()
-            debug_path = f"debug_audio/eleven_{int(time.time()*1000)}.raw"
 
             async with aiohttp.ClientSession() as session:
                 async with session.ws_connect(url, max_msg_size=0) as el_ws:
@@ -214,18 +193,10 @@ async def agent_voice(ws: WebSocket): # async means and what is ws: Websocket
                         if msg.type is aiohttp.WSMsgType.TEXT:
                             data = json.loads(msg.data)
                             audio_b64 = data.get("audio")
-                            if audio_b64:                        # skip control packets
+                            if audio_b64:
+                                # Convert and send audio to frontend
                                 chunk = base64.b64decode(audio_b64)
-
-                                # send to frontend (existing behavior)
                                 await ws.send_bytes(chunk)
-
-                                # also save locally to debug
-                                # with open(debug_path, "ab") as f:
-                                #     f.write(chunk)
-                            else : 
-                                print("[DEBUG] No audio in this packet")
-                                print(data)
                             if data.get("isFinal"):
                                 break
                         elif msg.type is aiohttp.WSMsgType.ERROR:
@@ -234,16 +205,12 @@ async def agent_voice(ws: WebSocket): # async means and what is ws: Websocket
 
     except Exception as e:
         print(f"WebSocket error: {e}")
-
         try:
             await ws.send_json({"error": "Connection error occurred"})
         except:
             pass
     finally:
-        try:
-            stream_stt.stop()
-        except Exception:
-            pass
+        # Clean up connection
         try:
             if ws.application_state.name != "DISCONNECTED" and ws.client_state.name != "DISCONNECTED":
                 await ws.close()
@@ -251,4 +218,3 @@ async def agent_voice(ws: WebSocket): # async means and what is ws: Websocket
             pass
 
 
-# how many webscokets are we using here , what is each one doing  ?
