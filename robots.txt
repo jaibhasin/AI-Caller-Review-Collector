@@ -1,0 +1,32 @@
+# Robots.txt for AI Caller Review Collector
+# This is a development/portfolio project
+
+User-agent: *
+Disallow: /app/
+Disallow: /.env
+Disallow: /venv/
+Disallow: /__pycache__/
+Disallow: /.git/
+Disallow: /test_audio_formats.html
+Disallow: /conversation_example.md
+Disallow: /role_confusion_fix.md
+Disallow: /conversation_improvements.md
+Disallow: /structured_response_pipeline.md
+
+# Allow access to main frontend
+Allow: /frontend/
+Allow: /README.md
+Allow: /
+
+# API documentation
+Allow: /docs
+Allow: /redoc
+
+# Crawl delay (be nice to servers)
+Crawl-delay: 1
+
+# Sitemap (if you add one later)
+# Sitemap: https://yourdomain.com/sitemap.xml
+
+# Note: This project uses WebSocket connections and real-time audio
+# Most web crawlers won't be able to interact with the voice features

@@ -41,6 +41,30 @@ MODEL_ID = "eleven_turbo_v2_5"
 
 router = APIRouter()
 
+# Optimized single-pass response generation
+
+def fix_role_confusion(response: str) -> str:
+    """Fix any role confusion in the AI response"""
+    confusion_phrases = ["hi sarah", "hello sarah", "thanks for calling", "this is a good time", "thanks so much for calling"]
+    
+    if any(phrase in response.lower() for phrase in confusion_phrases):
+        print("[DEBUG] Fixed role confusion in AI response")
+        return "Oh wonderful! I'm so glad to hear you're available to chat. How has your experience been with the pickleball set so far?"
+    
+    return response
+
+def apply_natural_pacing(response: str) -> str:
+    """Add natural pauses to make speech less rushed"""
+    # Add pauses after excitement and between sentences
+    response = response.replace("! ", "!... ")  # Pause after excitement
+    response = response.replace(". ", "... ")   # Longer pauses between sentences
+    
+    # Ensure proper ending
+    if not response.endswith((".", "!", "?")):
+        response += "."
+        
+    return response
+
 
 BASE_PROMPT = """You are Sarah, a customer service representative from Lifelong company. You are CALLING the customer to ask about their experience with the Lifelong Professional Pickleball Set they purchased.
 
@@ -100,11 +124,10 @@ async def agent_voice(ws: WebSocket):
     memory.chat_memory.add_message(HumanMessage(content="[SYSTEM: You are Sarah from Lifelong calling the customer about their pickleball set purchase]"))
     memory.chat_memory.add_message(AIMessage(content="Understood. I am Sarah from Lifelong calling to ask about their experience."))
     
-    # Track conversation state to make it smarter
+    # Track conversation state (simplified for speed)
     conversation_state = {
         "topics_covered": [],
-        "customer_sentiment": "neutral",
-        "main_feedback": None,
+        "customer_sentiment": "neutral", 
         "turn_count": 0
     }
 
@@ -183,39 +206,71 @@ async def agent_voice(ws: WebSocket):
                 continue
 
 
-            # Step 3: Generate AI response with conversation intelligence
+            # Step 3: Generate AI response with optimized single LLM call
             llm_time1 = time.time()
             
             # Update conversation state
             conversation_state["turn_count"] += 1
             
-            # Add context with clear role reminder
-            context_input = f"Customer said: '{user_text}'"
-            context_input += " [REMEMBER: You are Sarah from Lifelong calling THEM about their purchase. Do not respond as the customer.]"
+            print(f"[DEBUG] Single-pass LLM call for turn {conversation_state['turn_count']}")
             
-            if conversation_state["turn_count"] > 5:
-                context_input += f" [Turn {conversation_state['turn_count']} - consider wrapping up soon]"
+            # ONE-PASS optimized prompt that does analysis + planning + generation internally
+            optimized_prompt = f"""
+You are Sarah, a warm customer service rep from Lifelong calling about their pickleball set purchase.
+
+CONTEXT:
+- Customer just said: "{user_text}"
+- Turn #{conversation_state['turn_count']} of conversation
+- Topics already discussed: {conversation_state['topics_covered']}
+- Previous sentiment: {conversation_state['customer_sentiment']}
+
+INSTRUCTIONS:
+1. Internally analyze their sentiment, topic, and emotion level
+2. Internally plan your acknowledgment style and empathy approach  
+3. Generate ONE natural response that:
+   - Acknowledges what they specifically said
+   - Shows appropriate empathy/enthusiasm
+   - Asks a relevant follow-up question
+   - Sounds conversational, not robotic
+   - Is 1-2 sentences maximum
+
+IMPORTANT:
+- YOU are Sarah calling THEM (don't respond as the customer)
+- Use their exact words when acknowledging
+- Match their energy level appropriately
+- If turn 6+, consider wrapping up naturally
+
+Return ONLY the final conversational response, nothing else:"""
+
+            # Single LLM call replaces the entire 3-step pipeline
+            response = llm.invoke(optimized_prompt)
+            agent_reply = response.content.strip()
             
-            agent_reply = conversation.predict(input=context_input).strip()
+            print(f"[DEBUG] Generated response: {agent_reply}")
             
-            # Clean up the response (remove any system notes)
-            if "[Note:" in agent_reply:
-                agent_reply = agent_reply.split("[Note:")[0].strip()
+            # Post-processing pipeline (keep these for quality)
+            agent_reply = fix_role_confusion(agent_reply)
+            agent_reply = apply_natural_pacing(agent_reply)
             
-            # Check for role confusion and fix it
-            if any(phrase in agent_reply.lower() for phrase in ["hi sarah", "hello sarah", "thanks for calling", "this is a good time"]):
-                # AI is responding as customer - fix this
-                agent_reply = "Oh wonderful! I'm so glad to hear you're available to chat. How has your experience been with the pickleball set so far?"
-                print("[DEBUG] Fixed role confusion in AI response")
+            # Simple conversation state updates (without complex analysis)
+            # Update sentiment based on simple keyword detection
+            user_lower = user_text.lower()
+            if any(word in user_lower for word in ["love", "great", "awesome", "amazing", "perfect"]):
+                conversation_state["customer_sentiment"] = "positive"
+            elif any(word in user_lower for word in ["hate", "terrible", "awful", "bad", "broken"]):
+                conversation_state["customer_sentiment"] = "negative"
             
-            # Add natural pauses to make speech less rushed
-            agent_reply = agent_reply.replace("! ", "!... ")  # Pause after excitement
-            agent_reply = agent_reply.replace(". ", "... ")   # Longer pauses between sentences
-            if not agent_reply.endswith((".", "!", "?")):
-                agent_reply += "."  # Ensure proper ending
+            # Update topics based on simple keyword detection
+            if any(word in user_lower for word in ["grip", "handle", "comfortable"]) and "grip" not in conversation_state["topics_covered"]:
+                conversation_state["topics_covered"].append("grip")
+            if any(word in user_lower for word in ["durable", "quality", "build"]) and "durability" not in conversation_state["topics_covered"]:
+                conversation_state["topics_covered"].append("durability")
+            if any(word in user_lower for word in ["game", "play", "performance"]) and "performance" not in conversation_state["topics_covered"]:
+                conversation_state["topics_covered"].append("performance")
             
-            print("[DEBUG] LLM response time:", round(time.time() - llm_time1, 3), "sec")
-            print("[DEBUG] Agent reply:", agent_reply)
+            print("[DEBUG] Optimized LLM time:", round(time.time() - llm_time1, 3), "sec")
+            print("[DEBUG] Conversation state:", conversation_state)
+            print("[DEBUG] Final agent reply:", agent_reply)
             await ws.send_json({"user_text": user_text, "agent_reply": agent_reply})
 
             # Step 4: Convert AI response to speech

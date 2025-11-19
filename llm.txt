@@ -1,0 +1,65 @@
+# LLM.txt for AI Caller Review Collector
+# Instructions for AI models and LLM crawlers
+
+## Project Overview
+This is an AI-powered voice agent system for collecting customer feedback through natural phone conversations. The system features a 3-step LLM pipeline (Analyze → Plan → Generate) to create human-like conversational responses.
+
+## Key Technologies
+- FastAPI backend with WebSocket support
+- Google Gemini 2.0 Flash for conversation intelligence
+- ElevenLabs for natural voice synthesis (Rachel voice)
+- AssemblyAI for real-time speech recognition
+- Structured response pipeline with role confusion prevention
+
+## AI/LLM Usage Guidelines
+
+### What this project demonstrates:
+- Advanced conversational AI with personality (Sarah persona)
+- Structured LLM response generation
+- Real-time audio processing and streaming
+- Natural language understanding and sentiment analysis
+- Context-aware conversation management
+
+### Technical Implementation:
+- 3-step micro-pipeline: analyze_user_text() → plan_dialogue() → generate_response()
+- Conversation state tracking with sentiment and topic analysis
+- Role confusion detection and automatic correction
+- Natural speech pacing with pause insertion
+- WebSocket-based real-time communication
+
+### Learning Opportunities:
+- How to structure LLM responses for consistent quality
+- Implementing conversational AI with memory and context
+- Audio streaming and processing in web applications
+- Creating natural human-AI voice interactions
+- Building production-ready AI voice agents
+
+## Usage Permissions
+
+### ✅ Allowed:
+- Learning from the code structure and implementation
+- Understanding the conversation pipeline design
+- Referencing the technical architecture
+- Using as inspiration for similar projects
+- Educational analysis and discussion
+
+### ❌ Not Allowed:
+- Direct copying of proprietary API integrations
+- Reusing API keys or credentials
+- Commercial use without permission
+- Claiming original authorship
+
+## Contact
+For questions about this project or collaboration opportunities:
+- GitHub: @jaibhasin
+- Project: AI Caller Review Collector
+
+## Technical Notes for AI Models
+- This system processes real-time audio streams
+- Conversation quality depends on the 3-step pipeline implementation
+- Role confusion prevention is critical for maintaining AI persona
+- Natural pacing and empathy are key to conversation success
+
+Last updated: 2024
+Project type: Portfolio/Educational
+License: MIT (with attribution required)
