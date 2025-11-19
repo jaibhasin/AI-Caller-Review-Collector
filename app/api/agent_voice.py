@@ -16,21 +16,23 @@ load_dotenv()
 
 GOOGLE_API_KEY = os.getenv("SECRET_KEY_GOOGLE_AI")  # Ensure this exists
 
-# Initialize LLM with API key
+# Initialize LLM with better settings for conversation
 llm = ChatGoogleGenerativeAI(
-    # model='gemini-2.0-flash-exp',
-    model ='gemini-2.5-flash-lite',
-    google_api_key=GOOGLE_API_KEY
+    model='gemini-2.0-flash-exp',  # Use the more advanced model
+    google_api_key=GOOGLE_API_KEY,
+    temperature=0.7,  # Make responses more natural and varied
+    max_tokens=100    # Keep responses concise but not too short
 )
 
 
 from langchain.chains import ConversationChain
 from langchain.memory import ConversationBufferMemory
+from langchain.schema import BaseMessage, HumanMessage, AIMessage
 
 
-API_KEY  = os.getenv("ELEVEN_LABS_API_KEY")         # ← make sure this exists
-VOICE_ID = "pNInz6obpgDQGcFmaJgB"
-# MODEL_ID = "eleven_turbo_v2_5"
+API_KEY  = os.getenv("ELEVEN_LABS_API_KEY")
+# Using a more conversational voice (this is Rachel - sounds more natural for phone calls)
+VOICE_ID = "21m00Tcm4TlvDq8ikWAM"  # Rachel - warm, conversational female voice
 MODEL_ID = "eleven_turbo_v2_5"
 
 
@@ -58,6 +60,21 @@ Conversation flow:
 
 Remember: This should feel like talking to a friend who works in customer service, not a survey bot.
 
+Example responses:
+- "Oh that's awesome! What do you love most about them?"
+- "I'm so sorry to hear that! Can you tell me what happened?"
+- "That's exactly what we were hoping for! How's the grip feeling?"
+- "Interesting! Have you noticed any difference in your game?"
+- "Thanks for sharing that! Is there anything else you'd like me to know?"
+- "Perfect! Well I really appreciate you taking the time to chat with me."
+
+Conversation guidelines:
+- If they seem busy or short, offer to call back later
+- If they're very positive, focus on what they love most
+- If they have complaints, be empathetic and get details
+- After 4-5 exchanges, start thinking about wrapping up naturally
+- Always end on a positive, grateful note
+
 Current conversation:
 {history}
 Human: {input}
@@ -82,6 +99,14 @@ async def agent_voice(ws: WebSocket):
         prompt=prompt,
         memory=memory
     )
+    
+    # Track conversation state to make it smarter
+    conversation_state = {
+        "topics_covered": [],
+        "customer_sentiment": "neutral",
+        "main_feedback": None,
+        "turn_count": 0
+    }
 
     PRODUCT_NAME = "Lifelong Professional Pickleball Set"
     PRODUCT_DESC = (
@@ -92,8 +117,8 @@ async def agent_voice(ws: WebSocket):
     try : 
         
         
-        # Generate initial greeting - make it sound natural
-        initial_reply = conversation.predict(input="Hi there! This is Sarah from Lifelong. I hope I'm catching you at a good time? I wanted to chat about the pickleball set you got from us recently.").strip()
+        # Generate initial greeting - make it sound natural and warm
+        initial_reply = conversation.predict(input="Hi! This is Sarah calling from Lifelong. How are you doing today? I hope I'm not catching you at a bad time - I just wanted to check in about the pickleball set you ordered from us!").strip()
         await ws.send_json({"user_text": "Call started", "agent_reply": initial_reply}) # where is this sending and what is it sending which format 
 
         # Stream initial greeting audio
@@ -102,13 +127,14 @@ async def agent_voice(ws: WebSocket):
 
         async with aiohttp.ClientSession() as session:   # what is aiohttp ? is it a websocket or what 
             async with session.ws_connect(url, max_msg_size=0) as el_ws: #what is session.ws_connect
-                await el_ws.send_json({ # what is el_ws
+                await el_ws.send_json({
                     "text": " ",
                     "xi_api_key": API_KEY,
                     "voice_settings": {
-                        "stability": 0.4,
-                        "similarity_boost": 0.9,
-                        "use_speaker_boost": False
+                        "stability": 0.5,        # More stable for natural conversation
+                        "similarity_boost": 0.8,  # Slightly less aggressive
+                        "use_speaker_boost": True, # Better for phone-like quality
+                        "style": 0.2              # Add some conversational style
                     },
                     "generation_config": {"chunk_length_schedule": [50, 100]}
                 })
@@ -155,9 +181,55 @@ async def agent_voice(ws: WebSocket):
                 continue
 
 
-            # Step 3: Generate AI response
+            # Step 3: Generate AI response with conversation intelligence
             llm_time1 = time.time()
-            agent_reply = conversation.predict(input=user_text).strip()
+            
+            # Update conversation state
+            conversation_state["turn_count"] += 1
+            
+            # Analyze customer sentiment from their response
+            user_lower = user_text.lower()
+            if any(word in user_lower for word in ["love", "great", "awesome", "amazing", "perfect", "excellent"]):
+                conversation_state["customer_sentiment"] = "positive"
+            elif any(word in user_lower for word in ["hate", "terrible", "awful", "bad", "broken", "disappointed"]):
+                conversation_state["customer_sentiment"] = "negative"
+            elif any(word in user_lower for word in ["okay", "fine", "alright", "decent"]):
+                conversation_state["customer_sentiment"] = "neutral"
+            
+            # Track topics mentioned
+            if any(word in user_lower for word in ["grip", "handle", "comfortable"]):
+                if "grip_comfort" not in conversation_state["topics_covered"]:
+                    conversation_state["topics_covered"].append("grip_comfort")
+            if any(word in user_lower for word in ["durable", "quality", "build", "material"]):
+                if "durability" not in conversation_state["topics_covered"]:
+                    conversation_state["topics_covered"].append("durability")
+            if any(word in user_lower for word in ["game", "play", "performance", "better"]):
+                if "performance" not in conversation_state["topics_covered"]:
+                    conversation_state["topics_covered"].append("performance")
+            
+            # Build smarter context for AI
+            context_input = user_text
+            
+            # Add sentiment context
+            if conversation_state["customer_sentiment"] == "positive":
+                context_input += " [Customer seems happy - focus on what they love most]"
+            elif conversation_state["customer_sentiment"] == "negative":
+                context_input += " [Customer has concerns - be empathetic and get details]"
+            
+            # Add topic context to avoid repetition
+            if len(conversation_state["topics_covered"]) > 0:
+                context_input += f" [Already discussed: {', '.join(conversation_state['topics_covered'])}]"
+            
+            # Add turn management
+            if conversation_state["turn_count"] > 5:
+                context_input += f" [Turn {conversation_state['turn_count']} - consider wrapping up soon]"
+            
+            agent_reply = conversation.predict(input=context_input).strip()
+            
+            # Clean up the response (remove any system notes)
+            if "[Note:" in agent_reply:
+                agent_reply = agent_reply.split("[Note:")[0].strip()
+            
             print("[DEBUG] LLM response time:", round(time.time() - llm_time1, 3), "sec")
             print("[DEBUG] Agent reply:", agent_reply)
             await ws.send_json({"user_text": user_text, "agent_reply": agent_reply})
@@ -177,9 +249,10 @@ async def agent_voice(ws: WebSocket):
                         "text": " ",
                         "xi_api_key": API_KEY,
                         "voice_settings": {
-                            "stability": 0.3,
-                            "similarity_boost": 0.8,
-                            "use_speaker_boost": False
+                            "stability": 0.5,        # More stable for natural conversation
+                            "similarity_boost": 0.8,  # Good balance
+                            "use_speaker_boost": True, # Better for phone-like quality
+                            "style": 0.2              # Add some conversational style
                         },
                         "generation_config": {"chunk_length_schedule": [50, 100]}
                     })
