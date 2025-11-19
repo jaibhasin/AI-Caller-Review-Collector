@@ -22,7 +22,8 @@ GOOGLE_API_KEY = os.getenv("SECRET_KEY_GOOGLE_AI")  # Ensure this exists
 
 # Initialize LLM with API key
 llm = ChatGoogleGenerativeAI(
-    model='gemini-2.0-flash-exp',
+    # model='gemini-2.0-flash-exp',
+    model ='gemini-2.5-flash-lite',
     google_api_key=GOOGLE_API_KEY
 )
 
@@ -61,8 +62,8 @@ prompt = PromptTemplate.from_template(BASE_PROMPT)
 
 
 @router.websocket("/agent/voice")
-async def agent_voice(ws: WebSocket):
-    await ws.accept()
+async def agent_voice(ws: WebSocket): # async means and what is ws: Websocket
+    await ws.accept() # what does await and accpet mean
     memory = ConversationBufferMemory()
     
     conversation = ConversationChain(
@@ -85,15 +86,15 @@ async def agent_voice(ws: WebSocket):
         
         # Generate initial greeting
         initial_reply = conversation.predict(input="Hello, I'm calling to get your feedback on our Lifelong Professional Pickleball Set. How has your experience been?").strip()
-        await ws.send_json({"user_text": "Call started", "agent_reply": initial_reply})
+        await ws.send_json({"user_text": "Call started", "agent_reply": initial_reply}) # where is this sending and what is it sending which format 
 
         # Stream initial greeting audio
-        url = f"wss://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}/stream-input?model_id={MODEL_ID}"
+        url = f"wss://api.elevenlabs.io/v1/text-to-speech/{VOICE_ID}/stream-input?model_id={MODEL_ID}" # is there a websocket on that end as well , could we access it if this wasnt a websocket
         
         debug_path = f"/tmp/eleven_{int(time.time()*1000)}.raw"
-        async with aiohttp.ClientSession() as session:
-            async with session.ws_connect(url, max_msg_size=0) as el_ws:
-                await el_ws.send_json({
+        async with aiohttp.ClientSession() as session:   # what is aiohttp ? is it a websocket or what 
+            async with session.ws_connect(url, max_msg_size=0) as el_ws: #what is session.ws_connect
+                await el_ws.send_json({ # what is el_ws
                     "text": " ",
                     "xi_api_key": API_KEY,
                     "voice_settings": {
@@ -111,11 +112,11 @@ async def agent_voice(ws: WebSocket):
                         audio_b64 = data.get("audio")
                         # if audio_b64:
                         #     await ws.send_bytes(base64.b64decode(audio_b64))
-                        if audio_b64:                        # skip control packets
+                        if audio_b64:                       # what is base64 here 
                             chunk = base64.b64decode(audio_b64)
 
                             # send to frontend (existing behavior)
-                            await ws.send_bytes(chunk)
+                            await ws.send_bytes(chunk) # now are we receiving and sending audio in stream or full thing 
 
                             # also save locally to debug
                             # with open(debug_path, "ab") as f:
@@ -131,8 +132,8 @@ async def agent_voice(ws: WebSocket):
         while True : 
 
             # 1️⃣ receive caller audio
-            print('[DEBUG] Waiting for caller audio...')
-            first = await ws.receive()
+            # print('[DEBUG] Waiting for caller audio...')
+            first = await ws.receive() # now we are receiving audio from the caller frontend?
             if first["type"] != "websocket.receive" or "bytes" not in first:
                 await ws.close(code=4000)
                 return
@@ -158,10 +159,10 @@ async def agent_voice(ws: WebSocket):
 
             # new try using streaming STT
             st = time.time()
-            stream_stt.feed_webm(audio_bytes)
+            stream_stt.feed_webm(audio_bytes) # now are we sending webm audio to the STT service?
 
             # Wait for a final turn (end_of_turn) up to 5s (usually ~0.3–0.6s)
-            user_text = stream_stt.get_final_turn(timeout=5.0)
+            user_text = stream_stt.get_final_turn(timeout=5.0) # what is get_final_turn doing here. is it getting stream also ?
             if not user_text:
                 await ws.send_json({"error": "No finalized transcript yet"})
                 continue  # skip this iteration and read more audio
@@ -248,3 +249,6 @@ async def agent_voice(ws: WebSocket):
                 await ws.close()
         except:
             pass
+
+
+# how many webscokets are we using here , what is each one doing  ?

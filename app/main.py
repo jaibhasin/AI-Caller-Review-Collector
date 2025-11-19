@@ -1,5 +1,6 @@
-from fastapi import FastAPI
-from app.api.agent_voice import router as agent_voice_router
+from fastapi import FastAPI # main class to create webapp 
+
+from app.api.agent_voice import router as agent_voice_router # router to group endpoints , so they become active 
 
 app = FastAPI(title="AI Voice Review Collector", description="AI-powered voice agent for collecting customer feedback")
 

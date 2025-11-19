@@ -3,8 +3,8 @@ import os
 import json
 import time
 import queue
-import threading
-import subprocess
+import threading # how are we using threading here? is it related to async or parellelism 
+import subprocess #hwat is subprocess
 from typing import Optional
 from dotenv import load_dotenv
 
