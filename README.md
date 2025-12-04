@@ -272,8 +272,7 @@ MIT License - Feel free to use this project for learning and development.
 
 **Jai Bhasin**
 - 🐙 GitHub: [@jaibhasin](https://github.com/jaibhasin)
-- 💼 Portfolio: [Your Portfolio URL]
-- 📧 Email: [Your Email]
+- 📧 Email: bhasinjai@gmail.com
 
 ## 🙏 Acknowledgments
 
