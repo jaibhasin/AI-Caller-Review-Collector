@@ -263,18 +263,18 @@ Return ONLY the final conversational response, nothing else:"""
             print(f"[DEBUG] Generated response: {agent_reply}")
             
             # Post-processing pipeline (keep these for quality)
-            agent_reply = fix_role_confusion(agent_reply)
+            agent_reply = fix_role_confusion(agent_reply) # remove this function and fix context 
             agent_reply = apply_natural_pacing(agent_reply)
             
             # Simple conversation state updates (without complex analysis)
-            # Update sentiment based on simple keyword detection
+            #### CHANGE (use smarter way to do this )
             user_lower = user_text.lower()
             if any(word in user_lower for word in ["love", "great", "awesome", "amazing", "perfect"]):
                 conversation_state["customer_sentiment"] = "positive"
             elif any(word in user_lower for word in ["hate", "terrible", "awful", "bad", "broken"]):
                 conversation_state["customer_sentiment"] = "negative"
             
-            # Update topics based on simple keyword detection
+            # Update topics based on simple keyword detection (CHANGE ; use smarter way to do this )
             if any(word in user_lower for word in ["grip", "handle", "comfortable"]) and "grip" not in conversation_state["topics_covered"]:
                 conversation_state["topics_covered"].append("grip")
             if any(word in user_lower for word in ["durable", "quality", "build"]) and "durability" not in conversation_state["topics_covered"]:
