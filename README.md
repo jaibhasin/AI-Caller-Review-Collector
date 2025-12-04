@@ -2,7 +2,9 @@
 
 > **An intelligent AI voice agent that conducts natural phone conversations to collect customer feedback**
 
-Transform customer feedback collection with an AI agent that sounds and feels like talking to a real person. Sarah, our AI customer service representative, calls customers to gather authentic product reviews through natural conversation.
+Usually customers are very hesitant to give feedback online about their recent purchase of some product/service, for e.g. how often do people give a review on Amazon after using a product. 
+
+With latest developments in LLMs, Text to Speech services, and RAG systems, we can create a nice AI Caller that can be used to collect reviews/feedback from customers within a few seconds along with their suggestions, sentiment, etc.
 
 ## ✨ What Makes This Special
 
